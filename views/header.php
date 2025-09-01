@@ -29,6 +29,9 @@ $tipo_usuario = $_SESSION['usuario_tipo'] ?? '';
                         <a class="nav-link" href="vendedor_list.php"><i class="bi bi-people"></i> Gerenciar Vendedores</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="cliente_list.php"><i class="bi bi-people"></i> Gerenciar Clientes</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="vendas_list.php"><i class="bi bi-people"></i> Gerenciar Vendas</a>
                     </li>
 				<li class="nav-item">
