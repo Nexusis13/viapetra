@@ -259,7 +259,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td><?= htmlspecialchars($cliente['end_obra']) ?></td>
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <a href="cliente_obra.php?id=<?= $cliente['client_id'] ?>" class="btn btn-outline-primary btn-action" title="Editar Cliente">
+                                            <a href="cliente_form.php?id=<?= $cliente['client_id'] ?>" class="btn btn-outline-primary btn-action" title="Editar Cliente">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
                                             <button type="button" class="btn btn-outline-danger btn-action" title="Excluir Cliente" onclick="confirmarExclusao(<?= $cliente['client_id'] ?>, '<?= htmlspecialchars($cliente['nome'], ENT_QUOTES) ?>')">

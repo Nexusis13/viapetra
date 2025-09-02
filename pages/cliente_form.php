@@ -1,20 +1,24 @@
 <?php
 require_once '../config/config.php';
 
-// Verificar se é edição
-$is_edit = isset($_GET['client_id']) && !empty($_GET['client_id']);
-$client_id = $is_edit ? (int) $_GET['client_id'] : 0;
+$client_id = 0;
+$is_edit = false;
+if (isset($_GET['client_id']) && !empty($_GET['client_id'])) {
+    $client_id = (int) $_GET['client_id'];
+    $is_edit = true;
+} elseif (isset($_GET['id']) && !empty($_GET['id'])) {
+    $client_id = (int) $_GET['id'];
+    $is_edit = true;
+}
 $cliente = null;
 
 // Se for edição, buscar dados do cliente
 if ($is_edit) {
+    error_log("Editando cliente com ID: " . $client_id);
     $sql = "SELECT * FROM clientes WHERE client_id = ?";
-    $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param('i', $client_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $cliente = $result->fetch_assoc();
-    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$client_id]);
+    $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$cliente) {
         header("Location: cliente_list.php");
         exit;
@@ -41,14 +45,14 @@ function validarCPF($cpf) {
 
 // PROCESSAMENTO DO FORMULÁRIO
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nome = trim($_POST['nome']);
-    $documento = trim($_POST['cpf']);
-    $dt_nascimento = trim($_POST['dt_nascimento'] ?? '');
-    $tipo = trim($_POST['tipo'] ?? '');
-    $telefone = trim($_POST['telefone'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $endereco = trim($_POST['endereco'] ?? '');
-    $end_obra = trim($_POST['end_obra'] ?? '');
+    $nome = isset($_POST['nome']) ? trim($_POST['nome']) : ($cliente['nome'] ?? '');
+    $documento = isset($_POST['cpf']) ? trim($_POST['cpf']) : ($cliente['documento'] ?? '');
+    $dt_nascimento = isset($_POST['dt_nascimento']) ? trim($_POST['dt_nascimento']) : ($cliente['dt_nascimento'] ?? '');
+    $tipo = isset($_POST['tipo']) ? trim($_POST['tipo']) : ($cliente['tipo'] ?? '');
+    $telefone = isset($_POST['telefone']) ? trim($_POST['telefone']) : ($cliente['telefone'] ?? '');
+    $email = isset($_POST['email']) ? trim($_POST['email']) : ($cliente['email'] ?? '');
+    $endereco = isset($_POST['endereco']) ? trim($_POST['endereco']) : ($cliente['endereco'] ?? '');
+    $end_obra = isset($_POST['end_obra']) ? trim($_POST['end_obra']) : ($cliente['end_obra'] ?? '');
     $erros = [];
     
     // Validações
@@ -275,11 +279,17 @@ require_once '../views/header.php';
                             <!-- Data de Nascimento -->
                             <div class="col-md-6">
                                 <div class="form-floating">
+                                    <?php
+                                    $dt_nasc_val = $cliente['dt_nascimento'] ?? $_POST['dt_nascimento'] ?? '';
+                                    if ($dt_nasc_val === '0000-00-00' || $dt_nasc_val === '' || strpos($dt_nasc_val, '-') === 0 || (strlen($dt_nasc_val) === 10 && (int)substr($dt_nasc_val,0,4) <= 0)) {
+                                        $dt_nasc_val = '';
+                                    }
+                                    ?>
                                     <input type="date" 
                                            class="form-control <?= in_array('Data de nascimento inválida', $erros ?? []) || in_array('Data de nascimento não pode ser futura', $erros ?? []) ? 'is-invalid' : '' ?>" 
                                            id="dt_nascimento" 
                                            name="dt_nascimento" 
-                                           value="<?= htmlspecialchars($cliente['dt_nascimento'] ?? $_POST['dt_nascimento'] ?? '') ?>"
+                                           value="<?= htmlspecialchars($dt_nasc_val) ?>"
                                            max="<?= date('Y-m-d') ?>">
                                     <label for="dt_nascimento">
                                         <i class="bi bi-calendar-event me-1"></i>Data de Nascimento   <span class="required">*
@@ -344,53 +354,7 @@ require_once '../views/header.php';
                             </div>
                         </div>
 
-                        <!-- Informações Adicionais (se for edição) -->
-                        <?php if ($is_edit): ?>
-                        <hr class="my-4">
-                        <div class="row">
-                            <div class="col-12">
-                                <h6 class="text-muted mb-3">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Informações do Sistema
-                                </h6>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-floating">
-                                    <input type="text" 
-                                           class="form-control" 
-                                           value="<?= $cliente['client_id'] ?>"
-                                           readonly>
-                                    <label>ID do cliente</label>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-floating">
-                                    <input type="text" 
-                                           class="form-control" 
-                                           value="<?= !empty($cliente['dt_nascimento']) ? date('d/m/Y', strtotime($cliente['dt_nascimento'])) : 'Não informado' ?>"
-                                           readonly>
-                                    <label>Data de Nascimento</label>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-floating">
-                                    <?php
-                                    // Contar consultas do cliente
-                                    $consultas_sql = "SELECT COUNT(*) as total FROM consultas WHERE id_cliente = ?";
-                                    $stmt_consultas = $mysqli->prepare($consultas_sql);
-                                    $stmt_consultas->bind_param('i', $client_id);
-                                    $stmt_consultas->execute();
-                                    $total_consultas = $stmt_consultas->get_result()->fetch_assoc()['total'];
-                                    ?>
-                                    <input type="text" 
-                                           class="form-control" 
-                                           value="<?= $total_consultas ?> consulta(s)"
-                                           readonly>
-                                    <label>Total de Consultas</label>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endif; ?>
+                      
 
                         <!-- Botões de Ação -->
                         <div class="d-flex justify-content-between mt-4">
@@ -402,14 +366,6 @@ require_once '../views/header.php';
                             </div>
                             
                             <div class="btn-group" role="group">
-                                <?php if ($is_edit): ?>
-                                <a href="agenda.php?search=<?= urlencode($cliente['nome']) ?>" 
-                                   class="btn btn-outline-info">
-                                    <i class="bi bi-calendar-check me-1"></i>
-                                    Ver Consultas
-                                </a>
-                                <?php endif; ?>
-                                
                                 <button type="submit" class="btn btn-primary">
                                     <i class="bi bi-<?= $is_edit ? 'pencil' : 'plus' ?>-circle me-2"></i>
                                     <?= $is_edit ? 'Atualizar cliente' : 'Cadastrar cliente' ?>
@@ -422,108 +378,8 @@ require_once '../views/header.php';
         </div>
     </div>
 
-    <!-- Histórico de Consultas (se for edição) -->
-    <?php if ($is_edit): ?>
-    <?php
-    // Buscar últimas consultas do cliente
-    $historico_sql = "SELECT 
-    c.client_id,
-        c.data_horario,
-        c.status,
-        u.nome as medico
-        FROM consultas c
-        JOIN usuarios u ON c.id_medico = u.id
-        WHERE c.id_cliente = ?
-        ORDER BY c.data_horario DESC
-        LIMIT 10";
     
-    $stmt_historico = $mysqli->prepare($historico_sql);
-    $stmt_historico->bind_param('i', $client_id);
-    $stmt_historico->execute();
-    $consultas_historico = $stmt_historico->get_result()->fetch_all(MYSQLI_ASSOC);
-    ?>
     
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="bi bi-clock-history me-2"></i>
-                        Histórico de Consultas
-                    </h5>
-                    <a href="agenda.php?search=<?= urlencode($cliente['nome']) ?>" class="btn btn-light btn-sm">
-                        <i class="bi bi-eye me-1"></i>Ver Todas
-                    </a>
-                </div>
-                <div class="card-body p-0">
-                    <?php if (empty($consultas_historico)): ?>
-                    <div class="text-center py-4">
-                        <i class="bi bi-calendar-x text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
-                        <p class="text-muted mt-2 mb-0">Nenhuma consulta registrada</p>
-                        <a href="nova_consulta.php?cliente_id=<?= $client_id ?>" class="btn btn-primary btn-sm mt-2">
-                            <i class="bi bi-plus me-1"></i>Agendar Primeira Consulta
-                        </a>
-                    </div>
-                    <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Data/Hora</th>
-                                    <th>Status</th>
-                                    <th>Psicólogo</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($consultas_historico as $consulta): ?>
-                                <tr>
-                                    <td>
-                                        <i class="bi bi-calendar me-1"></i>
-                                        <?= date('d/m/Y', strtotime($consulta['data_horario'])) ?>
-                                        <br>
-                                        <small class="text-muted">
-                                            <i class="bi bi-clock me-1"></i>
-                                            <?= date('H:i', strtotime($consulta['data_horario'])) ?>
-                                        </small>
-                                    </td>
-                                    <td>
-                                        <?php
-                                        $status_config = [
-                                            'agendada' => ['badge' => 'warning', 'icon' => 'calendar-check', 'text' => 'Agendada'],
-                                            'atendimento' => ['badge' => 'primary', 'icon' => 'person-check', 'text' => 'Em Atendimento'],
-                                            'finalizada' => ['badge' => 'success', 'icon' => 'check-circle', 'text' => 'Finalizada'],
-                                            'negado' => ['badge' => 'danger', 'icon' => 'x-circle', 'text' => 'Não Compareceu'],
-                                            'cancelada' => ['badge' => 'secondary', 'icon' => 'dash-circle', 'text' => 'Cancelada']
-                                        ];
-                                        $config = $status_config[$consulta['status']] ?? $status_config['agendada'];
-                                        ?>
-                                        <span class="badge bg-<?= $config['badge'] ?>">
-                                            <i class="bi bi-<?= $config['icon'] ?> me-1"></i>
-                                            <?= $config['text'] ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <i class="bi bi-person-badge me-1"></i>
-                                        <?= htmlspecialchars($consulta['medico']) ?>
-                                    </td>
-                                    <td>
-                                        <a href="info_consulta.php?id=<?= $consulta['client_id'] ?>" 
-                                           class="btn btn-outline-info btn-sm">
-                                            <i class="bi bi-eye me-1"></i>Detalhes
-                                        </a>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
 </div>
 
 <?php require_once '../views/footer.php'; ?>
@@ -559,22 +415,6 @@ document.getElementById('telefone').addEventListener('input', function(e) {
     e.target.value = value;
 });
 
-// Máscara para contato de emergência
-document.getElementById('contato_emergencia').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/\D/g, '');
-    
-    if (value.length <= 11) {
-        if (value.length <= 10) {
-            // Telefone fixo: (11) 1234-5678
-            value = value.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-        } else {
-            // Celular: (11) 91234-5678
-            value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        }
-    }
-    
-    e.target.value = value;
-});
 
 // Validação em tempo real do email
 document.getElementById('email').addEventListener('blur', function(e) {
