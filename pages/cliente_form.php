@@ -1,23 +1,22 @@
 <?php
 require_once '../config/config.php';
-redirect_if_not_logged_in();
 
 // Verificar se é edição
-$is_edit = isset($_GET['id']) && !empty($_GET['id']);
-$paciente_id = $is_edit ? (int) $_GET['id'] : 0;
-$paciente = null;
+$is_edit = isset($_GET['client_id']) && !empty($_GET['client_id']);
+$client_id = $is_edit ? (int) $_GET['client_id'] : 0;
+$cliente = null;
 
-// Se for edição, buscar dados do paciente
+// Se for edição, buscar dados do cliente
 if ($is_edit) {
-    $sql = "SELECT * FROM pacientes WHERE id = ?";
+    $sql = "SELECT * FROM clientes WHERE client_id = ?";
     $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param('i', $paciente_id);
+    $stmt->bind_param('i', $client_id);
     $stmt->execute();
     $result = $stmt->get_result();
-    $paciente = $result->fetch_assoc();
+    $cliente = $result->fetch_assoc();
     
-    if (!$paciente) {
-        header("Location: pacientes_list.php");
+    if (!$cliente) {
+        header("Location: cliente_list.php");
         exit;
     }
 }
@@ -43,14 +42,13 @@ function validarCPF($cpf) {
 // PROCESSAMENTO DO FORMULÁRIO
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nome = trim($_POST['nome']);
-    $cpf = trim($_POST['cpf']);
-    $data_nascimento = trim($_POST['data_nascimento']);
-    $plano = trim($_POST['plano']);
-    $telefone = trim($_POST['telefone']);
-    $email = trim($_POST['email']);
-    $contato_emergencia = trim($_POST['contato_emergencia']);
-    $empresa = trim($_POST['empresa']);
-    
+    $documento = trim($_POST['cpf']);
+    $dt_nascimento = trim($_POST['dt_nascimento'] ?? '');
+    $tipo = trim($_POST['tipo'] ?? '');
+    $telefone = trim($_POST['telefone'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $endereco = trim($_POST['endereco'] ?? '');
+    $end_obra = trim($_POST['end_obra'] ?? '');
     $erros = [];
     
     // Validações
@@ -60,118 +58,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $erros[] = "Nome deve ter pelo menos 3 caracteres";
     }
     
-    if (!empty($cpf)) {
-        // Remove caracteres não numéricos do CPF
-        $cpf_limpo = preg_replace('/\D/', '', $cpf);
-        if (strlen($cpf_limpo) != 11) {
-            $erros[] = "CPF deve ter 11 dígitos";
-        } else {
+    if (!empty($documento)) {
+        // Remove caracteres não numéricos do documento
+        $documento_limpo = preg_replace('/\D/', '', $documento);
+        if (strlen($documento_limpo) != 11 && strlen($documento_limpo) != 14) {
+            $erros[] = "Documento deve ter 11 (CPF) ou 14 (CNPJ) dígitos";
+        } else if (strlen($documento_limpo) == 11) {
             // Validação básica de CPF
-            if (!validarCPF($cpf_limpo)) {
+            if (!validarCPF($documento_limpo)) {
                 $erros[] = "CPF inválido";
             }
         }
-        $cpf = $cpf_limpo;
+        $documento = $documento_limpo;
     }
     
-    if (!empty($data_nascimento)) {
-        $data_obj = DateTime::createFromFormat('Y-m-d', $data_nascimento);
-        if (!$data_obj || $data_obj->format('Y-m-d') !== $data_nascimento) {
+    if (!empty($dt_nascimento)) {
+        $data_obj = DateTime::createFromFormat('Y-m-d', $dt_nascimento);
+        if (!$data_obj || $data_obj->format('Y-m-d') !== $dt_nascimento) {
             $erros[] = "Data de nascimento inválida";
         } elseif ($data_obj > new DateTime()) {
             $erros[] = "Data de nascimento não pode ser futura";
         }
     }
     
+    // Validação telefone
+    if (!empty($telefone) && !preg_match('/^\(\d{2}\) \d{4,5}-\d{4}$/', $telefone)) {
+        $erros[] = "Telefone inválido";
+    }
+    // Validação email
     if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $erros[] = "Email inválido";
     }
     
-    if (!empty($telefone)) {
-        // Remove caracteres não numéricos
-        $telefone_limpo = preg_replace('/\D/', '', $telefone);
-        if (strlen($telefone_limpo) < 10 || strlen($telefone_limpo) > 11) {
-            $erros[] = "Telefone deve ter 10 ou 11 dígitos";
-        }
-        $telefone = $telefone_limpo;
-    }
-    
-    if (!empty($contato_emergencia)) {
-        // Remove caracteres não numéricos
-        $contato_limpo = preg_replace('/\D/', '', $contato_emergencia);
-        if (strlen($contato_limpo) < 10 || strlen($contato_limpo) > 11) {
-            $erros[] = "Contato de emergência deve ter 10 ou 11 dígitos";
-        }
-        $contato_emergencia = $contato_limpo;
-    }
-    
-    // Verificar se já existe paciente com mesmo CPF (se CPF foi informado)
-    if (!empty($cpf)) {
-        $check_cpf_sql = "SELECT id FROM pacientes WHERE cpf = ?";
+    // Verificar se já existe cliente com mesmo CPF (se CPF foi informado)
+    if (!empty($documento)) {
+        $check_doc_sql = "SELECT client_id FROM clientes WHERE documento = ?";
+        $params = [$documento];
         if ($is_edit) {
-            $check_cpf_sql .= " AND id != ?";
+            $check_doc_sql .= " AND client_id != ?";
+            $params[] = $client_id;
         }
-        
-        $stmt_check_cpf = $mysqli->prepare($check_cpf_sql);
-        if ($is_edit) {
-            $stmt_check_cpf->bind_param('si', $cpf, $paciente_id);
-        } else {
-            $stmt_check_cpf->bind_param('s', $cpf);
-        }
-        $stmt_check_cpf->execute();
-        $resultado_check_cpf = $stmt_check_cpf->get_result();
-        
-        if ($resultado_check_cpf->num_rows > 0) {
-            $erros[] = "Já existe um paciente com este CPF";
+        $stmt_check_doc = $pdo->prepare($check_doc_sql);
+        $stmt_check_doc->execute($params);
+        if ($stmt_check_doc->fetch()) {
+            $erros[] = "Já existe um cliente com este documento";
         }
     }
     
-    // Verificar se já existe paciente com mesmo nome (exceto se for edição do mesmo)
-    $check_sql = "SELECT id FROM pacientes WHERE LOWER(nome) = LOWER(?)";
+    // Verificar se já existe cliente com mesmo nome (exceto se for edição do mesmo)
+    $check_sql = "SELECT client_id FROM clientes WHERE LOWER(nome) = LOWER(?)";
+    $params = [$nome];
     if ($is_edit) {
-        $check_sql .= " AND id != ?";
+        $check_sql .= " AND client_id != ?";
+        $params[] = $client_id;
     }
-    
-    $stmt_check = $mysqli->prepare($check_sql);
-    if ($is_edit) {
-        $stmt_check->bind_param('si', $nome, $paciente_id);
-    } else {
-        $stmt_check->bind_param('s', $nome);
-    }
-    $stmt_check->execute();
-    $resultado_check = $stmt_check->get_result();
-    
-    if ($resultado_check->num_rows > 0) {
-        $erros[] = "Já existe um paciente com este nome";
+    $stmt_check = $pdo->prepare($check_sql);
+    $stmt_check->execute($params);
+    if ($stmt_check->fetch()) {
+        $erros[] = "Já existe um cliente com este nome";
     }
     
     // Se não há erros, salvar no banco
     if (empty($erros)) {
         if ($is_edit) {
-            // Atualizar paciente existente
-            $sql = "UPDATE pacientes SET nome = ?, cpf = ?, data_nascimento = ?, plano = ?, telefone = ?, email = ?, contato_emergencia = ?, empresa = ? WHERE id = ?";
-            $stmt = $mysqli->prepare($sql);
-            $stmt->bind_param('ssssssssi', $nome, $cpf, $data_nascimento, $plano, $telefone, $email, $contato_emergencia, $empresa, $paciente_id);
+            $sql = "UPDATE clientes SET nome = ?, documento = ?, dt_nascimento = ?, telefone = ?, email = ?, endereco = ?, end_obra = ?, tipo = ? WHERE client_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $client_id]);
         } else {
-            // Inserir novo paciente
-            $sql = "INSERT INTO pacientes (nome, cpf, data_nascimento, plano, telefone, email, contato_emergencia, empresa) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $mysqli->prepare($sql);
-            $stmt->bind_param('ssssssss', $nome, $cpf, $data_nascimento, $plano, $telefone, $email, $contato_emergencia, $empresa);
+            $sql = "INSERT INTO clientes (nome, documento, dt_nascimento, telefone, email, endereco, end_obra, tipo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            $stmt = $pdo->prepare($sql);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo]);
         }
-        
-        if ($stmt->execute()) {
-            // Redirecionar para lista após sucesso
-            $redirect_url = "pacientes_list.php";
+        if ($ok) {
+            $redirect_url = "cliente_list.php";
             if ($is_edit) {
                 $redirect_url .= "?updated=1";
             } else {
                 $redirect_url .= "?created=1";
             }
-            
             header("Location: $redirect_url");
             exit;
         } else {
-            $erros[] = "Erro ao salvar no banco de dados: " . $mysqli->error;
+            $erros[] = "Erro ao salvar no banco de dados.";
         }
     }
 }
@@ -185,7 +153,7 @@ require_once '../views/header.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $is_edit ? 'Editar' : 'Novo' ?> Paciente - Sistema Nexus</title>
+    <title><?= $is_edit ? 'Editar' : 'Novo' ?> cliente - Sistema Nexus</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     
@@ -220,14 +188,14 @@ require_once '../views/header.php';
                 <div>
                     <h2 class="mb-1">
                         <i class="bi bi-person-<?= $is_edit ? 'gear' : 'plus' ?> text-primary me-2"></i>
-                        <?= $is_edit ? 'Editar' : 'Novo' ?> Paciente
+                        <?= $is_edit ? 'Editar' : 'Novo' ?> cliente
                     </h2>
                     <p class="text-muted mb-0">
-                        <?= $is_edit ? 'Atualize os dados do paciente' : 'Cadastre um novo paciente no sistema' ?>
+                        <?= $is_edit ? 'Atualize os dados do cliente' : 'Cadastre um novo cliente no sistema' ?>
                     </p>
                 </div>
                 <div>
-                    <a href="pacientes_list.php" class="btn btn-outline-secondary">
+                    <a href="cliente_list.php" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left me-2"></i>
                         Voltar para Lista
                     </a>
@@ -257,7 +225,7 @@ require_once '../views/header.php';
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">
                         <i class="bi bi-person-lines-fill me-2"></i>
-                        Dados do Paciente
+                        Dados do cliente
                     </h5>
                 </div>
                 <div class="card-body">
@@ -267,37 +235,39 @@ require_once '../views/header.php';
                             <div class="col-12">
                                 <div class="form-floating">
                                     <input type="text" 
-                                           class="form-control <?= in_array('Nome é obrigatório', $erros ?? []) || in_array('Nome deve ter pelo menos 3 caracteres', $erros ?? []) ? 'is-invalid' : '' ?>" 
+                                           class="form-control <?= in_array('Nome é obrigatório', $erros ?? []) || in_array('Nome deve ter pelo menos 3 caracteres', $erros ?? []) ? 'is-invalid' : '' ?> required = *" 
                                            id="nome" 
                                            name="nome" 
-                                           value="<?= htmlspecialchars($paciente['nome'] ?? $_POST['nome'] ?? '') ?>"
+                                           value="<?= htmlspecialchars($cliente['nome'] ?? $_POST['nome'] ?? '') ?>"
                                            placeholder="Nome completo"
                                            required
                                            maxlength="100">
                                     <label for="nome">
-                                        <i class="bi bi-person me-1"></i>Nome Completo *
+                                        <i class="bi bi-person me-1"></i>Nome Completo <span class="required">*
                                     </label>
                                     <div class="form-text">
-                                        Nome completo do paciente (mínimo 3 caracteres)
+                                        Nome completo do cliente (mínimo 3 caracteres)
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- CPF -->
+           
+                            <input type="hidden" id="tipo" name="tipo" value="<?= htmlspecialchars($cliente['tipo'] ?? $_POST['tipo'] ?? 'CPF') ?>">
+                            <!-- CPF/CNPJ -->
                             <div class="col-md-6">
                                 <div class="form-floating">
                                     <input type="text" 
-                                           class="form-control <?= in_array('CPF deve ter 11 dígitos', $erros ?? []) || in_array('CPF inválido', $erros ?? []) || in_array('Já existe um paciente com este CPF', $erros ?? []) ? 'is-invalid' : '' ?>" 
+                                           class="form-control <?= in_array('CPF deve ter 11 dígitos', $erros ?? []) || in_array('CPF inválido', $erros ?? []) || in_array('Já existe um cliente com este CPF', $erros ?? []) ? 'is-invalid' : '' ?>" 
                                            id="cpf" 
                                            name="cpf" 
-                                           value="<?= !empty($paciente['cpf']) ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $paciente['cpf']) : ($_POST['cpf'] ?? '') ?>"
-                                           placeholder="000.000.000-00"
-                                           maxlength="14">
+                                           value="<?= !empty($cliente['documento']) ? (strlen($cliente['documento']) == 11 ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cliente['documento']) : preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $cliente['documento'])) : ($_POST['cpf'] ?? '') ?>"
+                                           placeholder="Digite CPF ou CNPJ"
+                                           maxlength="18">
                                     <label for="cpf">
-                                        <i class="bi bi-person-vcard me-1"></i>CPF
+                                        <i class="bi bi-person-vcard me-1"></i>CPF ou CNPJ  <span class="required">*
                                     </label>
                                     <div class="form-text">
-                                        Documento de identificação (opcional)
+                                        Digite o CPF (11 dígitos) ou CNPJ (14 dígitos)
                                     </div>
                                 </div>
                             </div>
@@ -307,57 +277,34 @@ require_once '../views/header.php';
                                 <div class="form-floating">
                                     <input type="date" 
                                            class="form-control <?= in_array('Data de nascimento inválida', $erros ?? []) || in_array('Data de nascimento não pode ser futura', $erros ?? []) ? 'is-invalid' : '' ?>" 
-                                           id="data_nascimento" 
-                                           name="data_nascimento" 
-                                           value="<?= htmlspecialchars($paciente['data_nascimento'] ?? $_POST['data_nascimento'] ?? '') ?>"
+                                           id="dt_nascimento" 
+                                           name="dt_nascimento" 
+                                           value="<?= htmlspecialchars($cliente['dt_nascimento'] ?? $_POST['dt_nascimento'] ?? '') ?>"
                                            max="<?= date('Y-m-d') ?>">
-                                    <label for="data_nascimento">
-                                        <i class="bi bi-calendar-event me-1"></i>Data de Nascimento
+                                    <label for="dt_nascimento">
+                                        <i class="bi bi-calendar-event me-1"></i>Data de Nascimento   <span class="required">*
                                     </label>
                                     <div class="form-text">
-                                        Data de nascimento do paciente
+                                        Data de nascimento do cliente
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Plano de Saúde -->
-                            <div class="col-md-6">
-    <div class="form-floating">
-        <select class="form-select" 
-                id="plano" 
-                name="plano">
-            <option value="" disabled <?= empty($paciente['plano'] ?? $_POST['plano'] ?? '') ? 'selected' : '' ?>>Selecione...</option>
-            <option value="Particular" <?= (($paciente['plano'] ?? $_POST['plano'] ?? '') == 'Particular') ? 'selected' : '' ?>>Particular</option>
-            <option value="Unimed" <?= (($paciente['plano'] ?? $_POST['plano'] ?? '') == 'Unimed') ? 'selected' : '' ?>>Unimed</option>
-            <option value="Amil" <?= (($paciente['plano'] ?? $_POST['plano'] ?? '') == 'Amil') ? 'selected' : '' ?>>Amil</option>
-            <option value="Bradesco Saúde" <?= (($paciente['plano'] ?? $_POST['plano'] ?? '') == 'Bradesco Saúde') ? 'selected' : '' ?>>Bradesco Saúde</option>
-            <option value="Outro" <?= (($paciente['plano'] ?? $_POST['plano'] ?? '') == 'Outro') ? 'selected' : '' ?>>Outro</option>
-        </select>
-        <label for="plano">
-            <i class="bi bi-card-text me-1"></i>Plano de Saúde
-        </label>
-        <div class="form-text">
-            Convênio médico ou particular
-        </div>
-    </div>
-</div>
-
-
                             <!-- Telefone -->
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="tel" 
-                                           class="form-control <?= in_array('Telefone deve ter 10 ou 11 dígitos', $erros ?? []) ? 'is-invalid' : '' ?>" 
+                                    <input type="text" 
+                                           class="form-control <?= in_array('Telefone inválido', $erros ?? []) ? 'is-invalid' : '' ?>" 
                                            id="telefone" 
                                            name="telefone" 
-                                           value="<?= !empty($paciente['telefone']) ? preg_replace('/(\d{2})(\d{4,5})(\d{4})/', '($1) $2-$3', $paciente['telefone']) : ($_POST['telefone'] ?? '') ?>"
-                                           placeholder="Telefone"
-                                           maxlength="15">
+                                           value="<?= htmlspecialchars($cliente['telefone'] ?? $_POST['telefone'] ?? '') ?>"
+                                           placeholder="(99) 99999-9999" 
+                                           maxlength="20">
                                     <label for="telefone">
-                                        <i class="bi bi-telephone me-1"></i>Telefone
+                                        <i class="bi bi-telephone me-1"></i>Telefone <span class="required">*</span>
                                     </label>
                                     <div class="form-text">
-                                        Formato: (11) 99999-9999
+                                        Informe o telefone no formato (99) 99999-9999
                                     </div>
                                 </div>
                             </div>
@@ -369,53 +316,30 @@ require_once '../views/header.php';
                                            class="form-control <?= in_array('Email inválido', $erros ?? []) ? 'is-invalid' : '' ?>" 
                                            id="email" 
                                            name="email" 
-                                           value="<?= htmlspecialchars($paciente['email'] ?? $_POST['email'] ?? '') ?>"
-                                           placeholder="Email"
+                                           value="<?= htmlspecialchars($cliente['email'] ?? $_POST['email'] ?? '') ?>"
+                                           placeholder="Digite o email" 
                                            maxlength="100">
                                     <label for="email">
-                                        <i class="bi bi-envelope me-1"></i>Email
+                                        <i class="bi bi-envelope me-1"></i>Email <span class="required">*</span>
                                     </label>
                                     <div class="form-text">
-                                        Endereço de email para contato
+                                        Informe um email válido
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Contato de Emergência -->
+                            <!-- Endereço -->
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="tel" 
-                                           class="form-control <?= in_array('Contato de emergência deve ter 10 ou 11 dígitos', $erros ?? []) ? 'is-invalid' : '' ?>" 
-                                           id="contato_emergencia" 
-                                           name="contato_emergencia" 
-                                           value="<?= !empty($paciente['contato_emergencia']) ? preg_replace('/(\d{2})(\d{4,5})(\d{4})/', '($1) $2-$3', $paciente['contato_emergencia']) : ($_POST['contato_emergencia'] ?? '') ?>"
-                                           placeholder="Contato de emergência"
-                                           maxlength="15">
-                                    <label for="contato_emergencia">
-                                        <i class="bi bi-telephone-plus me-1"></i>Contato de Emergência
-                                    </label>
-                                    <div class="form-text">
-                                        Telefone de contato para emergências
-                                    </div>
+                                    <input type="text" class="form-control" id="endereco" name="endereco" value="<?= htmlspecialchars($cliente['endereco'] ?? $_POST['endereco'] ?? '') ?>" required maxlength="100">
+                                    <label for="endereco"><i class="bi bi-geo-alt me-1"></i>Endereço  <span class="required">*</label>
                                 </div>
                             </div>
-
-                            <!-- Empresa/Recomendação -->
+                            <!-- Endereço da Obra -->
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="text" 
-                                           class="form-control" 
-                                           id="empresa" 
-                                           name="empresa" 
-                                           value="<?= htmlspecialchars($paciente['empresa'] ?? $_POST['empresa'] ?? '') ?>"
-                                           placeholder="Empresa ou recomendação"
-                                           maxlength="100">
-                                    <label for="empresa">
-                                        <i class="bi bi-building me-1"></i>Empresa/Recomendação
-                                    </label>
-                                    <div class="form-text">
-                                        Empresa que trabalha ou quem recomendou
-                                    </div>
+                                    <input type="text" class="form-control" id="end_obra" name="end_obra" value="<?= htmlspecialchars($cliente['end_obra'] ?? $_POST['end_obra'] ?? '') ?>" required maxlength="100">
+                                    <label for="end_obra"><i class="bi bi-geo me-1"></i>Endereço da Obra  <span class="required">*</label>
                                 </div>
                             </div>
                         </div>
@@ -434,16 +358,16 @@ require_once '../views/header.php';
                                 <div class="form-floating">
                                     <input type="text" 
                                            class="form-control" 
-                                           value="<?= $paciente['id'] ?>"
+                                           value="<?= $cliente['client_id'] ?>"
                                            readonly>
-                                    <label>ID do Paciente</label>
+                                    <label>ID do cliente</label>
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-floating">
                                     <input type="text" 
                                            class="form-control" 
-                                           value="<?= !empty($paciente['data_nascimento']) ? date('d/m/Y', strtotime($paciente['data_nascimento'])) : 'Não informado' ?>"
+                                           value="<?= !empty($cliente['dt_nascimento']) ? date('d/m/Y', strtotime($cliente['dt_nascimento'])) : 'Não informado' ?>"
                                            readonly>
                                     <label>Data de Nascimento</label>
                                 </div>
@@ -451,10 +375,10 @@ require_once '../views/header.php';
                             <div class="col-md-4">
                                 <div class="form-floating">
                                     <?php
-                                    // Contar consultas do paciente
-                                    $consultas_sql = "SELECT COUNT(*) as total FROM consultas WHERE id_paciente = ?";
+                                    // Contar consultas do cliente
+                                    $consultas_sql = "SELECT COUNT(*) as total FROM consultas WHERE id_cliente = ?";
                                     $stmt_consultas = $mysqli->prepare($consultas_sql);
-                                    $stmt_consultas->bind_param('i', $paciente_id);
+                                    $stmt_consultas->bind_param('i', $client_id);
                                     $stmt_consultas->execute();
                                     $total_consultas = $stmt_consultas->get_result()->fetch_assoc()['total'];
                                     ?>
@@ -471,7 +395,7 @@ require_once '../views/header.php';
                         <!-- Botões de Ação -->
                         <div class="d-flex justify-content-between mt-4">
                             <div>
-                                <a href="pacientes_list.php" class="btn btn-outline-secondary">
+                                <a href="cliente_list.php" class="btn btn-outline-secondary">
                                     <i class="bi bi-arrow-left me-2"></i>
                                     Cancelar
                                 </a>
@@ -479,7 +403,7 @@ require_once '../views/header.php';
                             
                             <div class="btn-group" role="group">
                                 <?php if ($is_edit): ?>
-                                <a href="agenda.php?search=<?= urlencode($paciente['nome']) ?>" 
+                                <a href="agenda.php?search=<?= urlencode($cliente['nome']) ?>" 
                                    class="btn btn-outline-info">
                                     <i class="bi bi-calendar-check me-1"></i>
                                     Ver Consultas
@@ -488,7 +412,7 @@ require_once '../views/header.php';
                                 
                                 <button type="submit" class="btn btn-primary">
                                     <i class="bi bi-<?= $is_edit ? 'pencil' : 'plus' ?>-circle me-2"></i>
-                                    <?= $is_edit ? 'Atualizar Paciente' : 'Cadastrar Paciente' ?>
+                                    <?= $is_edit ? 'Atualizar cliente' : 'Cadastrar cliente' ?>
                                 </button>
                             </div>
                         </div>
@@ -501,20 +425,20 @@ require_once '../views/header.php';
     <!-- Histórico de Consultas (se for edição) -->
     <?php if ($is_edit): ?>
     <?php
-    // Buscar últimas consultas do paciente
+    // Buscar últimas consultas do cliente
     $historico_sql = "SELECT 
-        c.id,
+    c.client_id,
         c.data_horario,
         c.status,
         u.nome as medico
         FROM consultas c
         JOIN usuarios u ON c.id_medico = u.id
-        WHERE c.id_paciente = ?
+        WHERE c.id_cliente = ?
         ORDER BY c.data_horario DESC
         LIMIT 10";
     
     $stmt_historico = $mysqli->prepare($historico_sql);
-    $stmt_historico->bind_param('i', $paciente_id);
+    $stmt_historico->bind_param('i', $client_id);
     $stmt_historico->execute();
     $consultas_historico = $stmt_historico->get_result()->fetch_all(MYSQLI_ASSOC);
     ?>
@@ -527,7 +451,7 @@ require_once '../views/header.php';
                         <i class="bi bi-clock-history me-2"></i>
                         Histórico de Consultas
                     </h5>
-                    <a href="agenda.php?search=<?= urlencode($paciente['nome']) ?>" class="btn btn-light btn-sm">
+                    <a href="agenda.php?search=<?= urlencode($cliente['nome']) ?>" class="btn btn-light btn-sm">
                         <i class="bi bi-eye me-1"></i>Ver Todas
                     </a>
                 </div>
@@ -536,7 +460,7 @@ require_once '../views/header.php';
                     <div class="text-center py-4">
                         <i class="bi bi-calendar-x text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
                         <p class="text-muted mt-2 mb-0">Nenhuma consulta registrada</p>
-                        <a href="nova_consulta.php?paciente_id=<?= $paciente_id ?>" class="btn btn-primary btn-sm mt-2">
+                        <a href="nova_consulta.php?cliente_id=<?= $client_id ?>" class="btn btn-primary btn-sm mt-2">
                             <i class="bi bi-plus me-1"></i>Agendar Primeira Consulta
                         </a>
                     </div>
@@ -584,7 +508,7 @@ require_once '../views/header.php';
                                         <?= htmlspecialchars($consulta['medico']) ?>
                                     </td>
                                     <td>
-                                        <a href="info_consulta.php?id=<?= $consulta['id'] ?>" 
+                                        <a href="info_consulta.php?id=<?= $consulta['client_id'] ?>" 
                                            class="btn btn-outline-info btn-sm">
                                             <i class="bi bi-eye me-1"></i>Detalhes
                                         </a>
@@ -605,31 +529,33 @@ require_once '../views/header.php';
 <?php require_once '../views/footer.php'; ?>
 
 <script>
-// Máscara para CPF
+// Máscara dinâmica para CPF/CNPJ e detecção automática do tipo
 document.getElementById('cpf').addEventListener('input', function(e) {
     let value = e.target.value.replace(/\D/g, '');
-    
-    if (value.length <= 11) {
+    let tipo = 'CPF';
+    if (value.length > 11) {
+        // CNPJ
+        tipo = 'CNPJ';
+        value = value.slice(0, 14);
+        value = value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    } else {
+        // CPF
+        value = value.slice(0, 11);
         value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
     }
-    
     e.target.value = value;
+    document.getElementById('tipo').value = tipo;
 });
 
 // Máscara para telefone
 document.getElementById('telefone').addEventListener('input', function(e) {
     let value = e.target.value.replace(/\D/g, '');
-    
-    if (value.length <= 11) {
-        if (value.length <= 10) {
-            // Telefone fixo: (11) 1234-5678
-            value = value.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-        } else {
-            // Celular: (11) 91234-5678
-            value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        }
+    if (value.length > 11) value = value.slice(0, 11);
+    if (value.length > 10) {
+        value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    } else if (value.length > 2) {
+        value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
     }
-    
     e.target.value = value;
 });
 
@@ -695,13 +621,13 @@ document.getElementById('nome').addEventListener('blur', function(e) {
 document.querySelector('form').addEventListener('submit', function(e) {
     const nome = document.getElementById('nome').value.trim();
     const cpf = document.getElementById('cpf').value.replace(/\D/g, '');
-    const dataNascimento = document.getElementById('data_nascimento').value;
-    const telefone = document.getElementById('telefone').value.replace(/\D/g, '');
-    const email = document.getElementById('email').value.trim();
-    const contatoEmergencia = document.getElementById('contato_emergencia').value.replace(/\D/g, '');
-    
+    const dataNascimento = document.getElementById('dt_nascimento').value;
+    const tipo = document.getElementById('tipo').value;
+    const endereco = document.getElementById('endereco').value.trim();
+    const endObra = document.getElementById('end_obra').value.trim();
+
     let hasError = false;
-    
+
     // Validar nome
     if (nome.length < 3) {
         document.getElementById('nome').classList.add('is-invalid');
@@ -709,52 +635,43 @@ document.querySelector('form').addEventListener('submit', function(e) {
     } else {
         document.getElementById('nome').classList.remove('is-invalid');
     }
-    
+
     // Validar CPF (se preenchido)
-    if (cpf && !validarCPFCliente(cpf)) {
+    if (cpf && !validarCPFCliente(cpf) && cpf.length === 11) {
         document.getElementById('cpf').classList.add('is-invalid');
         hasError = true;
     } else {
         document.getElementById('cpf').classList.remove('is-invalid');
     }
-    
+
     // Validar data de nascimento (se preenchida)
     if (dataNascimento) {
         const hoje = new Date();
         const nascimento = new Date(dataNascimento);
-        
         if (nascimento > hoje) {
-            document.getElementById('data_nascimento').classList.add('is-invalid');
+            document.getElementById('dt_nascimento').classList.add('is-invalid');
             hasError = true;
         } else {
-            document.getElementById('data_nascimento').classList.remove('is-invalid');
+            document.getElementById('dt_nascimento').classList.remove('is-invalid');
         }
     }
-    
-    // Validar telefone (se preenchido)
-    if (telefone && (telefone.length < 10 || telefone.length > 11)) {
-        document.getElementById('telefone').classList.add('is-invalid');
+
+    // Validar endereço
+    if (endereco.length < 3) {
+        document.getElementById('endereco').classList.add('is-invalid');
         hasError = true;
     } else {
-        document.getElementById('telefone').classList.remove('is-invalid');
+        document.getElementById('endereco').classList.remove('is-invalid');
     }
-    
-    // Validar email (se preenchido)
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        document.getElementById('email').classList.add('is-invalid');
+
+    // Validar endereço da obra
+    if (endObra.length < 3) {
+        document.getElementById('end_obra').classList.add('is-invalid');
         hasError = true;
     } else {
-        document.getElementById('email').classList.remove('is-invalid');
+        document.getElementById('end_obra').classList.remove('is-invalid');
     }
-    
-    // Validar contato de emergência (se preenchido)
-    if (contatoEmergencia && (contatoEmergencia.length < 10 || contatoEmergencia.length > 11)) {
-        document.getElementById('contato_emergencia').classList.add('is-invalid');
-        hasError = true;
-    } else {
-        document.getElementById('contato_emergencia').classList.remove('is-invalid');
-    }
-    
+
     if (hasError) {
         e.preventDefault();
         showNotification('Por favor, corrija os campos destacados em vermelho.', 'error');
