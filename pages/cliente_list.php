@@ -1,4 +1,6 @@
 <?php
+
+
 require_once '../config/config.php';
 require_once '../views/header.php';
 
@@ -60,7 +62,8 @@ $clientes_sql = "SELECT
     c.telefone,
     c.endereco,
     c.end_obra,
-    c.status
+    c.status,
+    c.email
     FROM clientes c
     " . $where_clause . "
     ORDER BY c.nome ASC
@@ -70,6 +73,20 @@ $stmt = $pdo->prepare($clientes_sql);
 $stmt->execute($params);
 $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// FORMATAR O DOCUMENTO(CPF/CNPJ)
+if (!function_exists('formatarDocumento')) {
+    function formatarDocumento($doc) {
+        $doc = preg_replace('/\D/', '', $doc);
+        if (strlen($doc) === 11) {
+            // CPF: 000.000.000-00
+            return preg_replace("/(\d{3})(\d{3})(\d{3})(\d{2})/", "$1.$2.$3-$4", $doc);
+        } elseif (strlen($doc) === 14) {
+            // CNPJ: 00.000.000/0000-00
+            return preg_replace("/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/", "$1.$2.$3/$4-$5", $doc);
+        }
+        return htmlspecialchars($doc);
+    }
+}
 
 ?>
 
@@ -256,6 +273,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <th>Nome</th>
                                         <th>Data de Nascimento</th>
                                         <th>Telefone</th>
+                                        <th>Email</th>
                                         <th>Endereço</th>
                                         <th>Endereço da Obra</th>
                                         <th>Status</th>
@@ -267,11 +285,12 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <tr>
                                             <td><?= htmlspecialchars($cliente['client_id']) ?></td>
                                             <td><?= htmlspecialchars($cliente['tipo']) ?></td>
-                                            <td><?= htmlspecialchars($cliente['documento']) ?></td>
+                                            <td><?= formatarDocumento($cliente['documento']) ?></td>
                                             <td><?= htmlspecialchars($cliente['nome']) ?></td>
                                             <td><?= !empty($cliente['dt_nascimento']) ? date('d/m/Y', strtotime($cliente['dt_nascimento'])) : '' ?>
                                             </td>
                                             <td><?= htmlspecialchars($cliente['telefone']) ?></td>
+                                            <td><?= htmlspecialchars($cliente['email'] ?? '') ?></td>
                                             <td><?= htmlspecialchars($cliente['endereco']) ?></td>
                                             <td><?= htmlspecialchars($cliente['end_obra']) ?></td>
                                             <td>
