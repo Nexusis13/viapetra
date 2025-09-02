@@ -1,5 +1,23 @@
 <?php
 require_once '../config/config.php';
+
+
+// FORMATAR O DOCUMENTO(CPF/CNPJ)
+if (!function_exists('formatarDocumento')) {
+    function formatarDocumento($doc) {
+        $doc = preg_replace('/\D/', '', $doc);
+        if (strlen($doc) === 11) {
+            // CPF: 000.000.000-00
+            return preg_replace("/(\d{3})(\d{3})(\d{3})(\d{2})/", "$1.$2.$3-$4", $doc);
+        } elseif (strlen($doc) === 14) {
+            // CNPJ: 00.000.000/0000-00
+            return preg_replace("/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/", "$1.$2.$3/$4-$5", $doc);
+        }
+        return htmlspecialchars($doc);
+    }
+}
+
+
 $clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento, telefone, endereco, end_obra, status FROM clientes ORDER BY nome ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
@@ -31,7 +49,7 @@ $clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento,
         <tbody>
             <?php foreach ($clientes as $c): ?>
             <tr>
-                <td><?= htmlspecialchars($c['documento']) ?></td>
+                <td><?= formatarDocumento($c['documento']) ?></td>
                 <td><?= htmlspecialchars($c['nome']) ?></td>
                 <td><?= !empty($c['dt_nascimento']) ? date('d/m/Y', strtotime($c['dt_nascimento'])) : '' ?></td>
                 <td><?= htmlspecialchars($c['telefone']) ?></td>

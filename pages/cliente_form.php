@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = isset($_POST['email']) ? trim($_POST['email']) : ($cliente['email'] ?? '');
     $endereco = isset($_POST['endereco']) ? trim($_POST['endereco']) : ($cliente['endereco'] ?? '');
     $end_obra = isset($_POST['end_obra']) ? trim($_POST['end_obra']) : ($cliente['end_obra'] ?? '');
+    $status = isset($_POST['status']) ? (int)$_POST['status'] : ($cliente['status'] ?? 1);
     $erros = [];
     
     // Validações
@@ -125,13 +126,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Se não há erros, salvar no banco
     if (empty($erros)) {
         if ($is_edit) {
-            $sql = "UPDATE clientes SET nome = ?, documento = ?, dt_nascimento = ?, telefone = ?, email = ?, endereco = ?, end_obra = ?, tipo = ? WHERE client_id = ?";
+            $sql = "UPDATE clientes SET nome = ?, documento = ?, dt_nascimento = ?, telefone = ?, email = ?, endereco = ?, end_obra = ?, tipo = ?, status = ? WHERE client_id = ?";
             $stmt = $pdo->prepare($sql);
-            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $client_id]);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $status, $client_id]);
         } else {
-            $sql = "INSERT INTO clientes (nome, documento, dt_nascimento, telefone, email, endereco, end_obra, tipo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO clientes (nome, documento, dt_nascimento, telefone, email, endereco, end_obra, tipo, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $pdo->prepare($sql);
-            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo]);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $status]);
         }
         if ($ok) {
             $redirect_url = "cliente_list.php";
@@ -224,15 +225,7 @@ require_once '../views/header.php';
 
     <!-- Formulário -->
     <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">
-                        <i class="bi bi-person-lines-fill me-2"></i>
-                        Dados do cliente
-                    </h5>
-                </div>
-                <div class="card-body">
+
                     <form method="POST" novalidate>
                         <div class="row g-4">
                             <!-- Nome Completo -->
@@ -350,6 +343,27 @@ require_once '../views/header.php';
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="end_obra" name="end_obra" value="<?= htmlspecialchars($cliente['end_obra'] ?? $_POST['end_obra'] ?? '') ?>" required maxlength="100">
                                     <label for="end_obra"><i class="bi bi-geo me-1"></i>Endereço da Obra  <span class="required">*</label>
+                                </div>
+                            </div>
+
+                            <!-- status -->
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    <?php
+                                    // DETERMINA O STATUS PARA CLIENTE CADASTRADO
+                                    if (isset($_POST['status'])) {
+                                        $status_select = (int)$_POST['status'];
+                                    } elseif (isset($cliente['status'])) {
+                                        $status_select = (int)$cliente['status'];
+                                    } else {
+                                        $status_select = 1; // PADRAO: Ativo
+                                    }
+                                    ?>
+                                    <select class="form-select" id="status" name="status">
+                                        <option value="1" <?= ($status_select === 1) ? 'selected' : '' ?>>Ativo</option>
+                                        <option value="0" <?= ($status_select === 0) ? 'selected' : '' ?>>Inativo</option>
+                                    </select>
+                                    <label for="status"><i class="bi bi-toggle-on me-1"></i>Status</label>
                                 </div>
                             </div>
                         </div>
