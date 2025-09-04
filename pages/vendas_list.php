@@ -65,7 +65,7 @@ $vendedoresDisponiveis = $stmtVendedores->fetchAll();
 require_once '../views/header.php';
 ?>
 
-<div class="container">
+<div class="container-fluid">
     <h2>Vendas Cadastradas</h2>
 
     <form method="get" class="row g-3 mt-3 mb-4">
@@ -81,7 +81,7 @@ require_once '../views/header.php';
             <label class="form-label">Data Fim</label>
             <input type="date" name="data_fim" class="form-control" value="<?= htmlspecialchars($_GET['data_fim'] ?? '') ?>">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
             <label class="form-label">Vendedor</label>
             <select name="vendedor" class="form-control">
                 <option value="">Todos os vendedores</option>
@@ -92,7 +92,13 @@ require_once '../views/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-12 mt-2">
+        <!-- <div class="col-12 mt-2">
+            <button type="submit" class="btn btn-primary">Buscar</button>
+            <a href="vendas_list.php" class="btn btn-secondary">Limpar</a>
+            <a href="vendas_form.php" class="btn btn-success float-end">+ Nova Venda</a>
+        </div> -->
+
+         <div class="col-12 mt-2">
             <button type="submit" class="btn btn-primary">Buscar</button>
             <a href="vendas_list.php" class="btn btn-secondary">Limpar</a>
             <a href="vendas_form.php" class="btn btn-success float-end">+ Nova Venda</a>

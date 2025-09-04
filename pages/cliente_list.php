@@ -63,7 +63,9 @@ $clientes_sql = "SELECT
     c.endereco,
     c.end_obra,
     c.status,
-    c.email
+    c.email,
+    c.cep_endereco,
+    c.cep_obra
     FROM clientes c
     " . $where_clause . "
     ORDER BY c.nome ASC

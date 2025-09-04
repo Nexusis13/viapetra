@@ -51,6 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tipo = isset($_POST['tipo']) ? trim($_POST['tipo']) : ($cliente['tipo'] ?? '');
     $telefone = isset($_POST['telefone']) ? trim($_POST['telefone']) : ($cliente['telefone'] ?? '');
     $email = isset($_POST['email']) ? trim($_POST['email']) : ($cliente['email'] ?? '');
+    $cep_endereco = isset($_POST['cep_endereco']) ? trim($_POST['cep_endereco']) : ($cliente['cep_endereco'] ?? '');
+    $cep_obra = isset($_POST['cep_obra']) ? trim($_POST['cep_obra']) : ($cliente['cep_obra'] ?? '');
+    // Se vazio, define como null para evitar salvar 0
+    if ($cep_endereco === '' || $cep_endereco === null) {
+        $cep_endereco = null;
+    }
+    if ($cep_obra === '' || $cep_obra === null) {
+        $cep_obra = null;
+    }
     $endereco = isset($_POST['endereco']) ? trim($_POST['endereco']) : ($cliente['endereco'] ?? '');
     $end_obra = isset($_POST['end_obra']) ? trim($_POST['end_obra']) : ($cliente['end_obra'] ?? '');
     $status = isset($_POST['status']) ? (int)$_POST['status'] : ($cliente['status'] ?? 1);
@@ -126,13 +135,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Se não há erros, salvar no banco
     if (empty($erros)) {
         if ($is_edit) {
-            $sql = "UPDATE clientes SET nome = ?, documento = ?, dt_nascimento = ?, telefone = ?, email = ?, endereco = ?, end_obra = ?, tipo = ?, status = ? WHERE client_id = ?";
+            $sql = "UPDATE clientes SET nome = ?, documento = ?, dt_nascimento = ?, telefone = ?, email = ?, cep_endereco = ?, endereco = ?, cep_obra = ?, end_obra = ?, tipo = ?, status = ? WHERE client_id = ?";
             $stmt = $pdo->prepare($sql);
-            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $status, $client_id]);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $cep_endereco, $endereco, $cep_obra, $end_obra, $tipo, $status, $client_id]);
         } else {
-            $sql = "INSERT INTO clientes (nome, documento, dt_nascimento, telefone, email, endereco, end_obra, tipo, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO clientes (nome, documento, dt_nascimento, telefone, email, cep_endereco, endereco, cep_obra, end_obra, tipo, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $pdo->prepare($sql);
-            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $endereco, $end_obra, $tipo, $status]);
+            $ok = $stmt->execute([$nome, $documento, $dt_nascimento, $telefone, $email, $cep_endereco, $endereco, $cep_obra, $end_obra, $tipo, $status]);
         }
         if ($ok) {
             $redirect_url = "cliente_list.php";
@@ -331,18 +340,30 @@ require_once '../views/header.php';
                                 </div>
                             </div>
 
-                            <!-- Endereço -->
-                            <div class="col-md-6">
+                            <!-- CEP Endereço e Endereço -->
+                            <div class="col-md-3">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="endereco" name="endereco" value="<?= htmlspecialchars($cliente['endereco'] ?? $_POST['endereco'] ?? '') ?>" required maxlength="100">
-                                    <label for="endereco"><i class="bi bi-geo-alt me-1"></i>Endereço  <span class="required">*</label>
+                                    <input type="text" class="form-control" id="cep_endereco" name="cep_endereco" value="<?= htmlspecialchars($cliente['cep_endereco'] ?? $_POST['cep_endereco'] ?? '') ?>" maxlength="9" placeholder="CEP">
+                                    <label for="cep_endereco"><i class="bi bi-geo-alt me-1"></i>CEP Endereço</label>
                                 </div>
                             </div>
-                            <!-- Endereço da Obra -->
-                            <div class="col-md-6">
+                            <div class="col-md-3">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="endereco" name="endereco" value="<?= htmlspecialchars($cliente['endereco'] ?? $_POST['endereco'] ?? '') ?>" required maxlength="100">
+                                    <label for="endereco"><i class="bi bi-geo-alt me-1"></i>Endereço <span class="required">*</span></label>
+                                </div>
+                            </div>
+                            <!-- CEP Obra e Endereço da Obra -->
+                            <div class="col-md-3">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="cep_obra" name="cep_obra" value="<?= htmlspecialchars($cliente['cep_obra'] ?? $_POST['cep_obra'] ?? '') ?>" maxlength="9" placeholder="CEP Obra" pattern="\d{5}-\d{3}" inputmode="numeric" autocomplete="postal-code">
+                                    <label for="cep_obra"><i class="bi bi-geo me-1"></i>CEP Obra</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="end_obra" name="end_obra" value="<?= htmlspecialchars($cliente['end_obra'] ?? $_POST['end_obra'] ?? '') ?>" required maxlength="100">
-                                    <label for="end_obra"><i class="bi bi-geo me-1"></i>Endereço da Obra  <span class="required">*</label>
+                                    <label for="end_obra"><i class="bi bi-geo me-1"></i>Endereço da Obra <span class="required">*</span></label>
                                 </div>
                             </div>
 
@@ -396,10 +417,132 @@ require_once '../views/header.php';
     
 </div>
 
+
 <?php require_once '../views/footer.php'; ?>
 
 <script>
-// Máscara dinâmica para CPF/CNPJ e detecção automática do tipo
+// Função para buscar endereço pelo CEP usando ViaCEP
+function buscarEnderecoPorCep(cep, callback) {
+    cep = cep.replace(/\D/g, '');
+    if (cep.length !== 8) {
+        callback(null);
+        return;
+    }
+    fetch('https://viacep.com.br/ws/' + cep + '/json/')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.erro) {
+                callback(data);
+            } else {
+                callback(null);
+            }
+        })
+        .catch(() => callback(null));
+}
+
+// CEP Endereço principal
+document.getElementById('cep_endereco').addEventListener('blur', function(e) {
+    const cep = e.target.value;
+    if (cep.replace(/\D/g, '').length === 8) {
+        buscarEnderecoPorCep(cep, function(data) {
+            if (data) {
+                let enderecoCompleto = '';
+                if (data.logradouro) enderecoCompleto += data.logradouro;
+                if (data.bairro) enderecoCompleto += (enderecoCompleto ? ', ' : '') + data.bairro;
+                if (data.localidade && data.uf) enderecoCompleto += (enderecoCompleto ? ' - ' : '') + data.localidade + '/' + data.uf;
+                document.getElementById('endereco').value = enderecoCompleto;
+            }
+        });
+    }
+});
+
+// CEP Obra
+document.getElementById('cep_obra').addEventListener('blur', function(e) {
+    const cep = e.target.value;
+    if (cep.replace(/\D/g, '').length === 8) {
+        buscarEnderecoPorCep(cep, function(data) {
+            if (data) {
+                let enderecoCompleto = '';
+                if (data.logradouro) enderecoCompleto += data.logradouro;
+                if (data.bairro) enderecoCompleto += (enderecoCompleto ? ', ' : '') + data.bairro;
+                if (data.localidade && data.uf) enderecoCompleto += (enderecoCompleto ? ' - ' : '') + data.localidade + '/' + data.uf;
+                document.getElementById('end_obra').value = enderecoCompleto;
+            }
+        });
+    }
+});
+
+// Validação instantânea do CPF/CNPJ ao sair do campo
+document.getElementById('cpf').addEventListener('blur', function(e) {
+    const valor = e.target.value.replace(/\D/g, '');
+    const parent = e.target.parentNode;
+    // Remove feedback anterior
+    const existingFeedback = parent.querySelector('.invalid-feedback');
+    if (existingFeedback) existingFeedback.remove();
+
+    if (!valor) {
+        e.target.classList.remove('is-invalid');
+        return;
+    }
+
+    if (valor.length === 11) {
+        // CPF
+        if (!validarCPFCliente(valor)) {
+            e.target.classList.add('is-invalid');
+            const feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback';
+            feedback.textContent = 'CPF inválido';
+            parent.appendChild(feedback);
+        } else {
+            e.target.classList.remove('is-invalid');
+        }
+    } else if (valor.length === 14) {
+        // CNPJ
+        if (!validarCNPJCliente(valor)) {
+            e.target.classList.add('is-invalid');
+            const feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback';
+            feedback.textContent = 'CNPJ inválido';
+            parent.appendChild(feedback);
+        } else {
+            e.target.classList.remove('is-invalid');
+        }
+    } else {
+        // Tamanho inválido
+        e.target.classList.add('is-invalid');
+        const feedback = document.createElement('div');
+        feedback.className = 'invalid-feedback';
+        feedback.textContent = 'O documento deve ter 11 (CPF) ou 14 (CNPJ) dígitos';
+        parent.appendChild(feedback);
+    }
+});
+
+// Validação de CNPJ (frontend)
+function validarCNPJCliente(cnpj) {
+    if (cnpj.length !== 14 || /^(\\d)\1{13}$/.test(cnpj)) return false;
+    let tamanho = cnpj.length - 2;
+    let numeros = cnpj.substring(0, tamanho);
+    let digitos = cnpj.substring(tamanho);
+    let soma = 0;
+    let pos = tamanho - 7;
+    for (let i = tamanho; i >= 1; i--) {
+        soma += numeros.charAt(tamanho - i) * pos--;
+        if (pos < 2) pos = 9;
+    }
+    let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+    if (resultado != digitos.charAt(0)) return false;
+    tamanho = tamanho + 1;
+    numeros = cnpj.substring(0, tamanho);
+    soma = 0;
+    pos = tamanho - 7;
+    for (let i = tamanho; i >= 1; i--) {
+        soma += numeros.charAt(tamanho - i) * pos--;
+        if (pos < 2) pos = 9;
+    }
+    resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+    if (resultado != digitos.charAt(1)) return false;
+    return true;
+}
 document.getElementById('cpf').addEventListener('input', function(e) {
     let value = e.target.value.replace(/\D/g, '');
     let tipo = 'CPF';
@@ -427,6 +570,41 @@ document.getElementById('telefone').addEventListener('input', function(e) {
         value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
     }
     e.target.value = value;
+});
+
+// Máscara para CEP (99999-999) nos campos cep_endereco e cep_obra
+function aplicarMascaraCep(input) {
+    let value = input.value.replace(/\D/g, '');
+    if (value.length > 8) value = value.slice(0, 8);
+    if (value.length > 5) {
+        value = value.replace(/(\d{5})(\d{1,3})/, '$1-$2');
+    }
+    input.value = value;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var cepEndereco = document.getElementById('cep_endereco');
+    var cepObra = document.getElementById('cep_obra');
+    if (cepEndereco) {
+        cepEndereco.addEventListener('input', function(e) {
+            aplicarMascaraCep(e.target);
+        });
+        cepEndereco.addEventListener('blur', function(e) {
+            aplicarMascaraCep(e.target);
+        });
+        // Aplica máscara ao carregar valor existente
+        aplicarMascaraCep(cepEndereco);
+    }
+    if (cepObra) {
+        cepObra.addEventListener('input', function(e) {
+            aplicarMascaraCep(e.target);
+        });
+        cepObra.addEventListener('blur', function(e) {
+            aplicarMascaraCep(e.target);
+        });
+        // Aplica máscara ao carregar valor existente
+        aplicarMascaraCep(cepObra);
+    }
 });
 
 
@@ -588,6 +766,7 @@ function showNotification(message, type = 'info') {
         }
     }, 5000);
 }
+
 
 // Focus no primeiro campo
 document.getElementById('nome').focus();

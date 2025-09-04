@@ -18,7 +18,19 @@ if (!function_exists('formatarDocumento')) {
 }
 
 
-$clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento, telefone, endereco, end_obra, status FROM clientes ORDER BY nome ASC")->fetchAll(PDO::FETCH_ASSOC);
+// Função para aplicar máscara de CEP
+if (!function_exists('mascaraCep')) {
+    function mascaraCep($cep) {
+        $cep = preg_replace('/\D/', '', $cep);
+        if (strlen($cep) === 8) {
+            return preg_replace('/(\d{5})(\d{3})/', '$1-$2', $cep);
+        }
+        return htmlspecialchars($cep);
+    }
+}
+
+
+$clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento, telefone, endereco, end_obra, cep_endereco, cep_obra, status FROM clientes ORDER BY nome ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -41,7 +53,10 @@ $clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento,
                 <th>Nome</th>
                 <th>Data de Nascimento</th>
                 <th>Telefone</th>
+                <th>Email</th>
+                <th>CEP (Endereço)</th>
                 <th>Endereço</th>
+                <th>CEP (Obra)</th>
                 <th>Endereço da Obra</th>
                 <th>Status</th>
             </tr>
@@ -52,9 +67,13 @@ $clientes = $pdo->query("SELECT client_id, tipo, documento, nome, dt_nascimento,
                 <td><?= formatarDocumento($c['documento']) ?></td>
                 <td><?= htmlspecialchars($c['nome']) ?></td>
                 <td><?= !empty($c['dt_nascimento']) ? date('d/m/Y', strtotime($c['dt_nascimento'])) : '' ?></td>
-                <td><?= htmlspecialchars($c['telefone']) ?></td>
-                <td><?= htmlspecialchars($c['endereco']) ?></td>
-                <td><?= htmlspecialchars($c['end_obra']) ?></td>
+                <td><?= htmlspecialchars($c['telefone'] ?? '') ?></td>
+                <td><?= htmlspecialchars($c['email'] ?? '') ?></td>
+                <td><?= mascaraCep($c['cep_endereco'] ?? '') ?></td>
+                <td><?= htmlspecialchars($c['endereco'] ?? '') ?></td>
+                <td><?= mascaraCep($c['cep_obra'] ?? '') ?></td>
+                <td><?= htmlspecialchars($c['end_obra'] ?? '') ?></td>
+
                 <td><?= $c['status'] ? 'Ativo' : 'Inativo' ?></td>
             </tr>
             <?php endforeach; ?>

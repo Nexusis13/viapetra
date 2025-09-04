@@ -408,10 +408,10 @@ require_once '../views/header.php';
                         </div>
 
                         <div class="col-md-6">
-                <label for="cliente" class="form-label">Nome do Cliente *</label>
-                <input type="text" name="cliente" id="cliente" class="form-control" 
-                    value="<?= htmlspecialchars($venda['cliente']) ?>" required maxlength="100" autocomplete="off" oninput="buscanome()">
-                <div id="cliente-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
+                            <label for="cliente" class="form-label">Nome do Cliente *</label>
+                            <input type="text" name="cliente" id="cliente" class="form-control" 
+                                   value="<?= htmlspecialchars($venda['cliente']) ?>" required maxlength="100"
+                                   oninput="this.value = this.value.toUpperCase();">
                         </div>
                     </div>
                 </div>
@@ -419,7 +419,7 @@ require_once '../views/header.php';
         </div>
 
         <!-- VALORES E PAGAMENTO -->
-        <!-- <div class="col-12">
+        <div class="col-12">
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">💰 Valores e Forma de Pagamento</h5>
@@ -473,7 +473,7 @@ require_once '../views/header.php';
                     </div>
                 </div>
             </div>
-        </div> -->
+        </div>
 
         <div class="col-12">
             <button type="submit" class="btn btn-primary">Salvar</button>
@@ -555,99 +555,7 @@ require_once '../views/header.php';
 }
 </style>
 
-
-
 <script>
-
-// Autocomplete AJAX para o campo cliente (nome, CPF, telefone ou email)
-let timeoutCliente = null;
-function buscanome() {
-    const clienteInput = document.getElementById('cliente');
-    const sugestoesDiv = document.getElementById('cliente-sugestoes');
-    if (!clienteInput || !sugestoesDiv) return;
-    clearTimeout(timeoutCliente);
-    const termo = clienteInput.value;
-    // Se o campo estiver vazio OU só espaço, busca os 25 primeiros
-    if (termo.length === 0 || /^\s+$/.test(termo)) {
-        timeoutCliente = setTimeout(() => {
-            fetch('../api/clientes.php?q=')
-                .then(r => r.json())
-                .then(dados => {
-                    sugestoesDiv.innerHTML = '';
-                    if (!Array.isArray(dados) || dados.length === 0) {
-                        sugestoesDiv.style.display = 'none';
-                        return;
-                    }
-                    dados.forEach(cli => {
-                        const item = document.createElement('button');
-                        item.type = 'button';
-                        item.className = 'list-group-item list-group-item-action';
-                        item.innerHTML = `<b>${cli.nome}</b> <small class='text-muted'>${cli.documento} | ${cli.telefone} | ${cli.email}</small>`;
-                        item.onclick = () => {
-                            clienteInput.value = cli.nome;
-                            sugestoesDiv.innerHTML = '';
-                            sugestoesDiv.style.display = 'none';
-                        };
-                        sugestoesDiv.appendChild(item);
-                    });
-                    sugestoesDiv.style.display = 'block';
-                })
-                .catch(() => {
-                    sugestoesDiv.innerHTML = '';
-                    sugestoesDiv.style.display = 'none';
-                });
-        }, 250);
-        return;
-    }
-    // Busca normal para 2+ caracteres
-    if (termo.length < 2) {
-        sugestoesDiv.innerHTML = '';
-        sugestoesDiv.style.display = 'none';
-        return;
-    }
-    timeoutCliente = setTimeout(() => {
-        fetch('../api/clientes.php?q=' + encodeURIComponent(termo))
-            .then(r => r.json())
-            .then(dados => {
-                sugestoesDiv.innerHTML = '';
-                if (!Array.isArray(dados) || dados.length === 0) {
-                    sugestoesDiv.style.display = 'none';
-                    return;
-                }
-                dados.forEach(cli => {
-                    const item = document.createElement('button');
-                    item.type = 'button';
-                    item.className = 'list-group-item list-group-item-action';
-                    item.innerHTML = `<b>${cli.nome}</b> <small class='text-muted'>${cli.documento} | ${cli.telefone} | ${cli.email}</small>`;
-                    item.onclick = () => {
-                        clienteInput.value = cli.nome;
-                        sugestoesDiv.innerHTML = '';
-                        sugestoesDiv.style.display = 'none';
-                    };
-                    sugestoesDiv.appendChild(item);
-                });
-                sugestoesDiv.style.display = 'block';
-            })
-            .catch(() => {
-                sugestoesDiv.innerHTML = '';
-                sugestoesDiv.style.display = 'none';
-            });
-    }, 250);
-}
-
-// Esconde sugestões ao clicar fora
-document.addEventListener('click', function(e) {
-    const clienteInput = document.getElementById('cliente');
-    const sugestoesDiv = document.getElementById('cliente-sugestoes');
-    if (!sugestoesDiv || !clienteInput) return;
-    if (!sugestoesDiv.contains(e.target) && e.target !== clienteInput) {
-        sugestoesDiv.innerHTML = '';
-        sugestoesDiv.style.display = 'none';
-    }
-});
-
-
-
 document.addEventListener('DOMContentLoaded', function() {
     // Mostrar modal de sucesso se venda foi cadastrada
     <?php if ($sucesso && $novaVenda): ?>
@@ -735,8 +643,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    if (vlrTotal) vlrTotal.addEventListener('input', validarEntradaVsTotal);
-    if (vlrEntrada) vlrEntrada.addEventListener('input', validarEntradaVsTotal);
+    vlrTotal.addEventListener('input', validarEntradaVsTotal);
+    vlrEntrada.addEventListener('input', validarEntradaVsTotal);
 
     // Validação para evitar vendedores iguais
     function validarVendedoresDiferentes() {
@@ -752,10 +660,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    const idVendedor = document.getElementById('id_vendedor');
-    const idVendedor2 = document.getElementById('id_vendedor2');
-    if (idVendedor) idVendedor.addEventListener('change', validarVendedoresDiferentes);
-    if (idVendedor2) idVendedor2.addEventListener('change', validarVendedoresDiferentes);
+    document.getElementById('id_vendedor').addEventListener('change', validarVendedoresDiferentes);
+    document.getElementById('id_vendedor2').addEventListener('change', validarVendedoresDiferentes);
 
     // Controle automático de parcelas baseado na forma de pagamento
     const formaPg = document.getElementById('forma_pg');
@@ -826,16 +732,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
     // Event listeners
-    if (formaPg) formaPg.addEventListener('change', adjustParcelasBasedOnFormaPg);
-    if (qtdParcelas) {
-        qtdParcelas.addEventListener('change', updateBoletosHelpText);
-        qtdParcelas.addEventListener('input', updateBoletosHelpText);
-    }
+    formaPg.addEventListener('change', adjustParcelasBasedOnFormaPg);
+    qtdParcelas.addEventListener('change', updateBoletosHelpText);
+    qtdParcelas.addEventListener('input', updateBoletosHelpText);
     
     // Aplicar lógica inicial ao carregar a página
-    if (formaPg) adjustParcelasBasedOnFormaPg();
+    adjustParcelasBasedOnFormaPg();
 });
 </script>
 
