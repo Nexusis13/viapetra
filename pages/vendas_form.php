@@ -418,7 +418,7 @@ require_once '../views/header.php';
                                 style="z-index: 1000;"></div>
                         </div>
 
-                       
+
                     </div>
                 </div>
             </div>
@@ -432,26 +432,52 @@ require_once '../views/header.php';
                 </div>
                 <div class="card-body">
                     <div class="row">
-                     <!-- Matéria-prima -->
-                    <div class="col-md-6">
-                        <label for="materia_prima" class="form-label">Matéria-prima</label>
-                        <input type="text" name="materia_prima" id="materia_prima" class="form-control" maxlength="255"
-                            autocomplete="off" oninput="buscaMateriaPrima()">
-                        <div id="materia-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;">
+                        <!-- Matéria-prima -->
+
+                        <div class="col-md-4">
+                            <label for="materia_prima"
+                                class="form-label d-flex align-items-center justify-content-between">
+                                <span>Matéria-prima</span>
+                                <a href="../pages/materiaprima_form.php" target="_blank"
+                                    class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar nova matéria-prima">
+                                    <i class="bi bi-plus"></i> Novo
+                                </a>
+                            </label>
+                            <input type="text" name="materia_prima" id="materia_prima" class="form-control"
+                                maxlength="255" autocomplete="off" oninput="buscaMateriaPrima()">
+                            <div id="materia-sugestoes" class="list-group position-absolute w-100"
+                                style="z-index: 1000;"></div>
                         </div>
-                    </div>
 
-                    <!-- Peça -->
-                    <div class="col-md-6">
-                        <label for="peca" class="form-label">Peça</label>
-                        <input type="text" name="peca" id="peca" class="form-control" maxlength="255" autocomplete="off"
-                            oninput="buscaPeca()">
-                        <div id="peca-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;">
+                        <div class="col-md-4">
+                            <label for="peca" class="form-label d-flex align-items-center justify-content-between">
+                                <span>Peça</span>
+                                <a href="../pages/pecas_form.php" target="_blank"
+                                    class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar nova peça">
+                                    <i class="bi bi-plus"></i> Novo
+                                </a>
+                            </label>
+                            <input type="text" name="peca" id="peca" class="form-control" maxlength="255"
+                                autocomplete="off" oninput="buscaPeca()">
+                            <div id="peca-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;">
+                            </div>
                         </div>
+
+                    <!-- Ambiente -->
+                    <div class="col-md-4">
+                        <label for="ambiente" class="form-label d-flex align-items-center justify-content-between">
+                            <span>Ambiente</span>
+                            <a href="../pages/ambiente_form.php" target="_blank" class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar novo ambiente">
+                                <i class="bi bi-plus"></i> Novo
+                            </a>
+                        </label>
+                        <input type="text" name="ambiente" id="ambiente" class="form-control" maxlength="50" autocomplete="off" oninput="buscaAmbiente()">
+                        <div id="ambiente-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
                     </div>
 
 
                     </div>
+
 
                 </div>
             </div>
@@ -605,6 +631,80 @@ require_once '../views/header.php';
 
 
 <script>
+    // Autocomplete AJAX para ambiente
+    let timeoutAmbiente = null;
+    function buscaAmbiente() {
+        const input = document.getElementById('ambiente');
+        const sugestoesDiv = document.getElementById('ambiente-sugestoes');
+        if (!input || !sugestoesDiv) return;
+        clearTimeout(timeoutAmbiente);
+        const termo = input.value;
+        if (termo.length === 0 || /^\s+$/.test(termo)) {
+            timeoutAmbiente = setTimeout(() => {
+                fetch('../api/ambiente.php?q=')
+                    .then(r => r.json())
+                    .then(dados => {
+                        sugestoesDiv.innerHTML = '';
+                        if (!Array.isArray(dados) || dados.length === 0) {
+                            sugestoesDiv.style.display = 'none';
+                            return;
+                        }
+                        dados.forEach(item => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action';
+                            btn.innerHTML = `<b>${item.nome}</b>`;
+                            btn.onclick = () => {
+                                input.value = item.nome;
+                                sugestoesDiv.innerHTML = '';
+                                sugestoesDiv.style.display = 'none';
+                            };
+                            sugestoesDiv.appendChild(btn);
+                        });
+                        sugestoesDiv.style.display = 'block';
+                    })
+                    .catch(() => {
+                        sugestoesDiv.innerHTML = '';
+                        sugestoesDiv.style.display = 'none';
+                    });
+            }, 250);
+            return;
+        }
+        if (termo.length < 2) {
+            sugestoesDiv.innerHTML = '';
+            sugestoesDiv.style.display = 'none';
+            return;
+        }
+        timeoutAmbiente = setTimeout(() => {
+            fetch('../api/ambiente.php?q=' + encodeURIComponent(termo))
+                .then(r => r.json())
+                .then(dados => {
+                    sugestoesDiv.innerHTML = '';
+                    if (!Array.isArray(dados) || dados.length === 0) {
+                        sugestoesDiv.style.display = 'none';
+                        return;
+                    }
+                    dados.forEach(item => {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'list-group-item list-group-item-action';
+                        btn.innerHTML = `<b>${item.nome}</b>`;
+                        btn.onclick = () => {
+                            input.value = item.nome;
+                            sugestoesDiv.innerHTML = '';
+                            sugestoesDiv.style.display = 'none';
+                        };
+                        sugestoesDiv.appendChild(btn);
+                    });
+                    sugestoesDiv.style.display = 'block';
+                })
+                .catch(() => {
+                    sugestoesDiv.innerHTML = '';
+                    sugestoesDiv.style.display = 'none';
+                });
+        }, 250);
+    }
+
     // Autocomplete AJAX para matéria-prima
     let timeoutMateria = null;
     function buscaMateriaPrima() {
@@ -853,6 +953,8 @@ require_once '../views/header.php';
         const matSug = document.getElementById('materia-sugestoes');
         const pecaInput = document.getElementById('peca');
         const pecaSug = document.getElementById('peca-sugestoes');
+        const ambienteInput = document.getElementById('ambiente');
+        const ambienteSug = document.getElementById('ambiente-sugestoes');
 
 
         if (!sugestoesDiv || !clienteInput) return;
@@ -871,6 +973,13 @@ require_once '../views/header.php';
             pecaSug.innerHTML = '';
             pecaSug.style.display = 'none';
         }
+
+        if (ambienteSug && ambienteInput && !ambienteSug.contains(e.target) && e.target !== ambienteInput) {
+            ambienteSug.innerHTML = '';
+            ambienteSug.style.display = 'none';
+        }
+
+
     });
 
 

@@ -8,7 +8,7 @@ $isEdit = false;
 // Se está editando
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     $id = (int) $_GET['id'];
-    $stmt = $pdo->prepare("SELECT * FROM materia_prima WHERE id_materia = ?");
+    $stmt = $pdo->prepare("SELECT * FROM ambiente WHERE id_ambiente = ?");
     $stmt->execute([$id]);
     $materia = $stmt->fetch();
 
@@ -31,28 +31,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Verificar se nome já existe (exceto se for edição do próprio registro)
-    $sqlCheck = "SELECT id_materia FROM materia_prima WHERE nome = ? AND id_materia != ?";
+    $sqlCheck = "SELECT id_ambiente FROM ambiente WHERE nome = ? AND id_ambiente != ?";
     $stmtCheck = $pdo->prepare($sqlCheck);
-    $stmtCheck->execute([$nome, $isEdit ? $materia['id_materia'] : 0]);
+    $stmtCheck->execute([$nome, $isEdit ? $materia['id_ambiente'] : 0]);
     if ($stmtCheck->fetch()) {
-        $errors[] = "Já existe uma matéria-prima com este nome.";
+        $errors[] = "Já existe um ambiente com este nome.";
     }
 
     if (empty($errors)) {
         if ($isEdit) {
             // Atualizar
-            $sql = "UPDATE materia_prima SET nome = ? WHERE id_materia = ?";
+            $sql = "UPDATE ambiente SET nome = ? WHERE id_ambiente = ?";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute([$nome, $materia['id_materia']]);
+            $stmt->execute([$nome, $materia['id_ambiente']]);
 
-            $mensagem = "Matéria-prima atualizada com sucesso!";
+            $mensagem = "MAmbiente atualizada com sucesso!";
         } else {
             // Inserir
-            $sql = "INSERT INTO materia_prima (nome) VALUES (?)";
+            $sql = "INSERT INTO ambiente (nome) VALUES (?)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$nome]);
 
-            $mensagem = "Matéria-prima cadastrada com sucesso!";
+            $mensagem = "Ambiente cadastrada com sucesso!";
         }
 
         header("Location: materiaprima_list.php?sucesso=" . urlencode($mensagem));
@@ -65,7 +65,7 @@ require_once '../views/header.php';
 
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><?= $isEdit ? 'Editar Matéria-Prima' : 'Nova Matéria-Prima' ?></h2>
+        <h2><?= $isEdit ? 'Editar Ambiente' : 'Novo Ambiente' ?></h2>
         <a href="materiaprima_list.php" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Voltar
         </a>
@@ -93,18 +93,16 @@ require_once '../views/header.php';
                 <div class="row">
                     <div class="col-md-12">
                         <div class="mb-3">
-                            <label for="nome" class="form-label">Nome da Matéria-Prima <span
+                            <label for="nome" class="form-label">Nome do Ambiente <span
                                     class="text-danger">*</span></label>
                             <textarea class="form-control" id="nome" name="nome" rows="3" required
-                                placeholder="Ex: ARDÓSIA BIPOLIDA, ARDÓSIA POLIDA, GRANITO BRANCO..."><?= htmlspecialchars($materia['nome'] ?? $_POST['nome'] ?? '') ?></textarea>
+                                placeholder="Ex: Sala, cozinha gourmet, banheiro, pia ..."><?= htmlspecialchars($materia['nome'] ?? $_POST['nome'] ?? '') ?></textarea>
                             <div class="form-text">
-                                Digite o nome completo da matéria-prima. Pode incluir detalhes sobre acabamento, cor,
-                                etc.
+                                Digite o nome completo do ambiente. Pode incluir detalhes sobre acabamento, cor, etc.
                             </div>
                         </div>
                     </div>
                 </div>
-
                 <div class="d-flex justify-content-between">
                     <div>
                         <button type="submit" class="btn btn-success">
@@ -117,8 +115,16 @@ require_once '../views/header.php';
                 </div>
 
                 <div class="d-flex justify-content-between">
-                </div>
-            <form>
+            </form>
         </div>
     </div>
 </div>
+
+<script>
+    // Prevenir envio duplo do formulário
+    document.querySelector('form').addEventListener('submit', function (e) {
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+    });
+</script>
