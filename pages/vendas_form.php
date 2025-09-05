@@ -2,6 +2,33 @@
 require_once '../config/protect.php';
 require_once '../config/config.php';
 
+// Função para definir opções de status e permissão de edição por tipo de usuário
+function getStatusOptionsByTipo($tipo)
+{
+    // Adapte conforme adicionar novos tipos
+    switch ($tipo) {
+        case 'admin':
+            return [
+                'options' => ['PENDENTE', 'PRODUCAO'],
+                'editavel' => true
+            ];
+        case 'user':
+        default:
+            return [
+                'options' => ['PENDENTE'],
+                'editavel' => false
+            ];
+    }
+}
+
+// Descobrir tipo do usuário logado
+$usuario_tipo = $_SESSION['usuario_tipo'] ?? 'user';
+$statusPerm = getStatusOptionsByTipo($usuario_tipo);
+$status_options = $statusPerm['options'];
+$status_editavel = $statusPerm['editavel'];
+
+
+
 $erro = '';
 $sucesso = '';
 $novaVenda = false;
@@ -18,7 +45,8 @@ $venda = [
     'vlr_entrada' => '',
     'forma_pg' => '',
     'qtd_parcelas' => '1',
-    'dt_boletos' => ''
+    'dt_boletos' => '',
+    'status' => 'PENDENTE'
 ];
 
 // Buscar vendedores ativos
@@ -51,6 +79,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
 
 // Processar formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $id_vendedor = $_POST['id_vendedor'] ?? '';
     $id_vendedor2 = $_POST['id_vendedor2'] ?? '';
     $id_comissao = $_POST['id_comissao'] ?? '';
@@ -61,7 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vlr_entrada = str_replace(['.', ','], ['', '.'], $_POST['vlr_entrada'] ?? '');
     $forma_pg = $_POST['forma_pg'] ?? '';
     $qtd_parcelas = $_POST['qtd_parcelas'] ?? '1';
+
     $dt_boletos = $_POST['dt_boletos'] ?? '';
+    $status = $_POST['status'] ?? $venda['status'] ?? 'PENDENTE';
+    // Validação do status
+    $status_enum = ['PENDENTE', 'PRODUCAO'];
+    if (!in_array($status, $status_enum)) {
+        $status = 'PENDENTE';
+    }
+
 
     // NOVA LÓGICA: Ajustar qtd_parcelas baseado na forma de pagamento
     $formas_avista = ['À Vista', 'PIX', 'Dinheiro', 'Cartão de Débito'];
@@ -70,28 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Validações
-    if (empty($id_vendedor)) {
-        $erro = 'Selecione um vendedor principal.';
-    } elseif (!empty($id_vendedor2) && $id_vendedor == $id_vendedor2) {
-        $erro = 'O segundo vendedor deve ser diferente do vendedor principal.';
+    if (empty($dt_venda)) {
+        $erro = 'Informe a data da venda.';
     } elseif (empty($cliente)) {
         $erro = 'Informe o nome do cliente.';
-    } elseif (empty($vlr_total) || !is_numeric($vlr_total) || $vlr_total <= 0) {
-        $erro = 'Informe um valor total válido.';
-    } elseif (!is_numeric($vlr_entrada) || $vlr_entrada < 0) {
-        $erro = 'Informe um valor de entrada válido.';
-    } elseif ($vlr_entrada > $vlr_total) {
-        $erro = 'O valor de entrada não pode ser maior que o valor total.';
-    } elseif (empty($venda['id_venda']) && $vlr_entrada == $vlr_total && $vlr_total > 0) {
-        $erro = 'Para uma nova venda, o valor de entrada não pode ser igual ao valor total. Use forma de pagamento "À Vista", "PIX" ou "Dinheiro" para vendas sem parcelamento.';
-    } elseif (empty($forma_pg)) {
-        $erro = 'Selecione uma forma de pagamento.';
-    } elseif (!is_numeric($qtd_parcelas) || $qtd_parcelas < 0) {
-        $erro = 'Informe uma quantidade de parcelas válida.';
-    } elseif (($forma_pg === 'Parcelado' || $forma_pg === 'Cartão de Crédito' || $forma_pg === 'Permuta Parcelado') && $qtd_parcelas < 1) {
-        $erro = 'Para pagamento parcelado, informe pelo menos 1 parcela.';
-    } elseif (($forma_pg === 'Parcelado' || $forma_pg === 'Cartão de Crédito' || $forma_pg === 'Permuta Parcelado') && empty($dt_boletos)) {
-        $erro = 'Para pagamento parcelado, informe a data dos boletos.';
     }
 
     // Validar se vendedores existem e estão ativos
@@ -141,8 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($venda['id_venda'])) {
                 // Inserir nova venda
                 $stmt = $pdo->prepare("
-                    INSERT INTO vendas (id_vendedor, id_vendedor2, id_comissao, id_comissao2, dt_venda, cliente, vlr_total, vlr_entrada, forma_pg, qtd_parcelas, dt_boletos) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO vendas (id_vendedor, id_vendedor2, id_comissao, id_comissao2, dt_venda, cliente, vlr_total, vlr_entrada, forma_pg, qtd_parcelas, dt_boletos, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
                     $id_vendedor,
@@ -155,7 +174,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $vlr_entrada,
                     $forma_pg,
                     $qtd_parcelas,
-                    $dt_boletos_final
+                    $dt_boletos_final,
+                    $status
                 ]);
 
                 $id_venda = $pdo->lastInsertId();
@@ -199,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE vendas SET 
                         id_vendedor = ?, id_vendedor2 = ?, id_comissao = ?, id_comissao2 = ?, dt_venda = ?, cliente = ?, 
-                        vlr_total = ?, vlr_entrada = ?, forma_pg = ?, qtd_parcelas = ?, dt_boletos = ?
+                        vlr_total = ?, vlr_entrada = ?, forma_pg = ?, qtd_parcelas = ?, dt_boletos = ?, status = ?
                     WHERE id_venda = ?
                 ");
                 $stmt->execute([
@@ -214,6 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $forma_pg,
                     $qtd_parcelas,
                     $dt_boletos_final,
+                    $status,
                     $venda['id_venda']
                 ]);
 
@@ -304,6 +325,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $venda['forma_pg'] = $forma_pg;
             $venda['qtd_parcelas'] = $qtd_parcelas;
             $venda['dt_boletos'] = $dt_boletos_final;
+            $venda['status'] = $status;
+
 
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -316,178 +339,618 @@ require_once '../views/header.php';
 ?>
 
 <div class="container-fluid">
-    <h2><?= empty($venda['id_venda']) && !$novaVenda ? 'Nova Venda' : ($novaVenda ? 'Nova Venda' : 'Editar Venda') ?>
-    </h2>
+    <form id="formVenda" method="post" autocomplete="off">
+        <h2><?= empty($venda['id_venda']) && !$novaVenda ? 'Nova Venda' : ($novaVenda ? 'Nova Venda' : 'Editar Venda') ?>
+        </h2>
 
-    <?php if ($erro): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($erro) ?></div>
-    <?php endif; ?>
+        <?php if ($erro): ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($erro) ?></div>
+        <?php endif; ?>
 
-    <?php if ($sucesso && !$novaVenda): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($sucesso) ?></div>
-    <?php endif; ?>
-
-    <form method="post" class="row g-3" id="vendaForm">
-        <!-- VENDEDORES E COMISSÕES -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">👥 Vendedores e Comissões</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Vendedor Principal -->
-                        <div class="col-md-6">
-                            <label for="id_vendedor" class="form-label">Vendedor Principal *</label>
-                            <select name="id_vendedor" id="id_vendedor" class="form-control" required>
-                                <option value="">Selecione o vendedor principal</option>
-                                <?php foreach ($vendedores as $vendedor): ?>
-                                    <option value="<?= $vendedor['id_vendedor'] ?>"
-                                        <?= $venda['id_vendedor'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($vendedor['nome']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="id_comissao" class="form-label">Comissão do Vendedor Principal</label>
-                            <select name="id_comissao" id="id_comissao" class="form-control">
-                                <option value="">Sem comissão</option>
-                                <?php foreach ($comissoes as $comissao): ?>
-                                    <option value="<?= $comissao['id_comissao'] ?>"
-                                        <?= $venda['id_comissao'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
-                                        <?= $comissao['valor'] ?>%
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <!-- Segundo Vendedor -->
-                        <div class="col-md-6">
-                            <label for="id_vendedor2" class="form-label">Segundo Vendedor <small
-                                    class="text-muted">(Opcional)</small></label>
-                            <select name="id_vendedor2" id="id_vendedor2" class="form-control">
-                                <option value="">Nenhum segundo vendedor</option>
-                                <?php foreach ($vendedores as $vendedor): ?>
-                                    <option value="<?= $vendedor['id_vendedor'] ?>"
-                                        <?= $venda['id_vendedor2'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($vendedor['nome']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="id_comissao2" class="form-label">Comissão do Segundo Vendedor</label>
-                            <select name="id_comissao2" id="id_comissao2" class="form-control">
-                                <option value="">Sem comissão</option>
-                                <?php foreach ($comissoes as $comissao): ?>
-                                    <option value="<?= $comissao['id_comissao'] ?>"
-                                        <?= $venda['id_comissao2'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
-                                        <?= $comissao['valor'] ?>%
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- DADOS DA VENDA -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">📄 Dados da Venda</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <label for="dt_venda" class="form-label">Data da Venda *</label>
-                            <input type="date" name="dt_venda" id="dt_venda" class="form-control"
-                                value="<?= htmlspecialchars($venda['dt_venda']) ?>" required>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="cliente" class="form-label">Nome do Cliente *</label>
-                            <input type="text" name="cliente" id="cliente" class="form-control"
-                                value="<?= htmlspecialchars($venda['cliente']) ?>" required maxlength="100"
-                                autocomplete="off" oninput="buscanome()">
-                            <div id="cliente-sugestoes" class="list-group position-absolute w-100"
-                                style="z-index: 1000;"></div>
-                        </div>
+        <?php if ($sucesso && !$novaVenda): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($sucesso) ?></div>
+        <?php endif; ?>
 
 
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Nav tabs -->
+        <ul class="nav nav-tabs mb-3" id="vendaTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dados-tab" data-bs-toggle="tab" data-bs-target="#dados"
+                    type="button" role="tab" aria-controls="dados" aria-selected="true">
+                    Dados da Venda e Vendedores
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button"
+                    role="tab" aria-controls="info" aria-selected="false">
+                    Informações da Venda
+                </button>
+            </li>
 
-        <!-- INFORMAÇÕES DA VENDA -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">📄 Informações da Venda</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Matéria-prima -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="arquivos-tab" data-bs-toggle="tab" data-bs-target="#arquivos" type="button"
+                    role="tab" aria-controls="arquivos" aria-selected="false">
+                    Arquivos PDF
+                </button>
+            </li>
+        </ul>
 
-                        <div class="col-md-4">
-                            <label for="materia_prima"
-                                class="form-label d-flex align-items-center justify-content-between">
-                                <span>Matéria-prima</span>
-                                <a href="../pages/materiaprima_form.php" target="_blank"
-                                    class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar nova matéria-prima">
-                                    <i class="bi bi-plus"></i> Novo
-                                </a>
-                            </label>
-                            <input type="text" name="materia_prima" id="materia_prima" class="form-control"
-                                maxlength="255" autocomplete="off" oninput="buscaMateriaPrima()">
-                            <div id="materia-sugestoes" class="list-group position-absolute w-100"
-                                style="z-index: 1000;"></div>
-                        </div>
+        <div class="tab-content" id="vendaTabsContent">
+            <!-- Aba 1: Dados da Venda e Vendedores -->
+            <div class="tab-pane fade show active" id="dados" role="tabpanel" aria-labelledby="dados-tab">
+                <div class="row g-3">
 
-                        <div class="col-md-4">
-                            <label for="peca" class="form-label d-flex align-items-center justify-content-between">
-                                <span>Peça</span>
-                                <a href="../pages/pecas_form.php" target="_blank"
-                                    class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar nova peça">
-                                    <i class="bi bi-plus"></i> Novo
-                                </a>
-                            </label>
-                            <input type="text" name="peca" id="peca" class="form-control" maxlength="255"
-                                autocomplete="off" oninput="buscaPeca()">
-                            <div id="peca-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;">
+                    <!-- DADOS DA VENDA -->
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">📄 Dados da Venda</h5>
+                            </div>
+                            <div class="card-body">
+                                <!--Linha 1-->
+                                <div class="row">
+
+
+                                    <div class="col-md-4">
+                                        <label for="cliente" class="form-label">Nome do Cliente *</label>
+                                        <input type="text" name="cliente" id="cliente" class="form-control"
+                                            value="<?= htmlspecialchars($venda['cliente']) ?>" required maxlength="100"
+                                            autocomplete="off" oninput="buscanome()">
+                                        <div id="cliente-sugestoes" class="list-group position-absolute w-100"
+                                            style="z-index: 1000;"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="status" class="form-label">Status da Venda</label>
+                                        <select name="status" id="status" class="form-control" <?= !$status_editavel ? 'disabled' : '' ?>>
+                                            <?php foreach ($status_options as $opt): ?>
+                                                <option value="<?= $opt ?>" <?= $venda['status'] === $opt ? 'selected' : '' ?>>
+                                                    <?= $opt ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <?php if (!$status_editavel): ?>
+                                            <input type="hidden" name="status"
+                                                value="<?= htmlspecialchars($venda['status']) ?>">
+                                        <?php endif; ?>
+
+                                    </div>
+
+
+
+                                    <div class="col-md-4">
+                                        <label for="dt_venda" class="form-label">Data da Venda *</label>
+                                        <input type="date" name="dt_venda" id="dt_venda" class="form-control"
+                                            value="<?= htmlspecialchars($venda['dt_venda']) ?>" required>
+                                    </div>
+                                </div>
+                                <!--Linha 2-->
+                                <div class="row">
+
+                                    <div class="col-md-4">
+                                        <label for="numero_pedido" class="form-label">Nº Pedido</label>
+                                        <input type="text" name="numero_pedido" id="numero_pedido" class="form-control"
+                                            value="<?= isset($venda['numero_pedido']) ? htmlspecialchars($venda['numero_pedido']) : '' ?>"
+                                            maxlength="50">
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <label for="dt_desenho" class="form-label">Data do Desenho</label>
+                                        <input type="date" name="dt_desenho" id="dt_desenho" class="form-control"
+                                            value="<?= isset($venda['dt_desenho']) ? htmlspecialchars($venda['dt_desenho']) : '' ?>">
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <label for="prazo_entrega" class="form-label">Prazo de Entrega (dias)</label>
+                                        <input type="number" name="prazo_entrega" id="prazo_entrega"
+                                            class="form-control"
+                                            value="<?= isset($venda['prazo_entrega']) ? htmlspecialchars($venda['prazo_entrega']) : '' ?>"
+                                            min="0">
+                                    </div>
+
+                                </div>
+
                             </div>
                         </div>
-
-                    <!-- Ambiente -->
-                    <div class="col-md-4">
-                        <label for="ambiente" class="form-label d-flex align-items-center justify-content-between">
-                            <span>Ambiente</span>
-                            <a href="../pages/ambiente_form.php" target="_blank" class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar novo ambiente">
-                                <i class="bi bi-plus"></i> Novo
-                            </a>
-                        </label>
-                        <input type="text" name="ambiente" id="ambiente" class="form-control" maxlength="50" autocomplete="off" oninput="buscaAmbiente()">
-                        <div id="ambiente-sugestoes" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
                     </div>
 
+                    <!-- VENDEDORES E COMISSÕES -->
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">👥 Vendedores e Comissões</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <!-- Vendedor Principal -->
+                                    <div class="col-md-6">
+                                        <label for="id_vendedor" class="form-label">Vendedor Principal *</label>
+                                        <select name="id_vendedor" id="id_vendedor" class="form-control">
+                                            <option value="">Selecione o vendedor principal</option>
+                                            <?php foreach ($vendedores as $vendedor): ?>
+                                                <option value="<?= $vendedor['id_vendedor'] ?>"
+                                                    <?= $venda['id_vendedor'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($vendedor['nome']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
 
+                                    <div class="col-md-6">
+                                        <label for="id_comissao" class="form-label">Comissão do Vendedor
+                                            Principal</label>
+                                        <select name="id_comissao" id="id_comissao" class="form-control">
+                                            <option value="">Sem comissão</option>
+                                            <?php foreach ($comissoes as $comissao): ?>
+                                                <option value="<?= $comissao['id_comissao'] ?>"
+                                                    <?= $venda['id_comissao'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
+                                                    <?= $comissao['valor'] ?>%
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <!-- Segundo Vendedor -->
+                                    <div class="col-md-6">
+                                        <label for="id_vendedor2" class="form-label">Segundo Vendedor <small
+                                                class="text-muted">(Opcional)</small></label>
+                                        <select name="id_vendedor2" id="id_vendedor2" class="form-control">
+                                            <option value="">Nenhum segundo vendedor</option>
+                                            <?php foreach ($vendedores as $vendedor): ?>
+                                                <option value="<?= $vendedor['id_vendedor'] ?>"
+                                                    <?= $venda['id_vendedor2'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($vendedor['nome']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label for="id_comissao2" class="form-label">Comissão do Segundo
+                                            Vendedor</label>
+                                        <select name="id_comissao2" id="id_comissao2" class="form-control">
+                                            <option value="">Sem comissão</option>
+                                            <?php foreach ($comissoes as $comissao): ?>
+                                                <option value="<?= $comissao['id_comissao'] ?>"
+                                                    <?= $venda['id_comissao2'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
+                                                    <?= $comissao['valor'] ?>%
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
 
+                <div class="col-12 mt-3">
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <a href="vendas_list.php" class="btn btn-secondary">Cancelar</a>
+                </div>
+            </div>
+    </form>
 
+    <!-- Aba 2: Informações da Venda -->
+    <div class="tab-pane fade" id="info" role="tabpanel" aria-labelledby="info-tab">
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📄 Informações da Venda</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Matéria-prima -->
+                            <div class="col-md-3">
+                                <label for="materia_prima"
+                                    class="form-label d-flex align-items-center justify-content-between">
+                                    <span>Matéria-prima</span>
+                                    <a href="../pages/materiaprima_form.php" target="_blank"
+                                        class="btn btn-sm btn-outline-primary ms-2"
+                                        title="Cadastrar nova matéria-prima">
+                                        <i class="bi bi-plus"></i> Novo
+                                    </a>
+                                </label>
+                                <input type="text" name="materia_prima" id="materia_prima" class="form-control"
+                                    maxlength="255" autocomplete="off" oninput="buscaMateriaPrima()">
+                                <input type="hidden" name="id_materia" id="id_materia">
+                                <div id="materia-sugestoes" class="list-group position-absolute w-100"
+                                    style="z-index: 1000;"></div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label for="peca" class="form-label d-flex align-items-center justify-content-between">
+                                    <span>Peça</span>
+                                    <a href="../pages/pecas_form.php" target="_blank"
+                                        class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar nova peça">
+                                        <i class="bi bi-plus"></i> Novo
+                                    </a>
+                                </label>
+                                <input type="text" name="peca" id="peca" class="form-control" maxlength="255"
+                                    autocomplete="off" oninput="buscaPeca()">
+                                <input type="hidden" name="id_peca" id="id_peca">
+                                <div id="peca-sugestoes" class="list-group position-absolute w-100"
+                                    style="z-index: 1000;"></div>
+                            </div>
+
+                            <!-- Ambiente -->
+                            <div class="col-md-3">
+                                <label for="ambiente"
+                                    class="form-label d-flex align-items-center justify-content-between">
+                                    <span>Ambiente</span>
+                                    <a href="../pages/ambiente_form.php" target="_blank"
+                                        class="btn btn-sm btn-outline-primary ms-2" title="Cadastrar novo ambiente">
+                                        <i class="bi bi-plus"></i> Novo
+                                    </a>
+                                </label>
+                                <input type="text" name="ambiente" id="ambiente" class="form-control" maxlength="50"
+                                    autocomplete="off" oninput="buscaAmbiente()">
+                                <input type="hidden" name="id_ambiente" id="id_ambiente">
+                                <div id="ambiente-sugestoes" class="list-group position-absolute w-100"
+                                    style="z-index: 1000;"></div>
+                            </div>
+
+                            <!-- Quantidade -->
+                            <div class="col-md-2">
+                                <label for="qtd_itens" class="form-label">Qtd</label>
+                                <input type="number" name="qtd_itens" id="qtd_itens" class="form-control" min="1"
+                                    value="1">
+                            </div>
+
+                        </div>
+
+                        <div class="col-12 mt-3">
+                            <button type="button" class="btn btn-primary" id="btnAdicionarItem">Adicionar</button>
+                        </div>
+                        <hr>
+                        <div class="col-12 mt-4">
+                            <h5>Itens da Venda</h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover align-middle" id="grid-itens">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Matéria-prima</th>
+                                            <th>Peça</th>
+                                            <th>Ambiente</th>
+                                            <th>Qtd</th>
+                                            <th style="width:90px;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="grid-itens-body">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted">Carregando...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+        <script>
+            // Debug: listar todos os forms e seus ids ao abrir a aba 3
+            document.getElementById('arquivos-tab').addEventListener('shown.bs.tab', function () {
+                setTimeout(function () {
+                    var forms = document.querySelectorAll('form');
+                    var msg = 'FORMS NA PÁGINA:\n';
+                    console.log(msg);
+                    forms.forEach(function (f, i) {
+                        msg += (i + 1) + ': id=' + (f.id || '-') + ', class=' + (f.className || '-') + '\n';
+                    });
+                    alert(msg);
+                }, 300);
+            });
+            function carregarGridItens() {
+                const idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+                const tbody = document.getElementById('grid-itens-body');
+                if (!idVenda) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Salve a venda para adicionar itens.</td></tr>';
+                    return;
+                }
+                fetch('../api/venda_itens_list.php?id_venda=' + idVenda)
+                    .then(r => r.json())
+                    .then(itens => {
+                        if (!Array.isArray(itens) || itens.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum item cadastrado.</td></tr>';
+                            return;
+                        }
+                        tbody.innerHTML = '';
+                        itens.forEach(item => {
+                            tbody.innerHTML += `<tr>
+                                    <td>${item.nome_materia_prima || '-'}</td>
+                                    <td>${item.nome_peca || '-'}</td>
+                                    <td>${item.nome_ambiente || '-'}</td>
+                                    <td>${item.qtd_itens || '-'}</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-warning me-1" title="Editar" onclick="editarItem(event, ${item.id_item})"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="btn btn-sm btn-danger" title="Remover" onclick="removerItem(event, ${item.id_item})"><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>`;
+                        });
+                    })
+                    .catch(() => {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erro ao carregar itens.</td></tr>';
+                    });
+            }
+            let editandoItemId = null;
+            function editarItem(event, id) {
+                if (event) event.preventDefault();
+                fetch('../api/venda_itens_get.php?id_item=' + id)
+                    .then(r => r.json())
+                    .then(item => {
+                        if (!item || !item.id_item) {
+                            alert('Item não encontrado.');
+                            return;
+                        }
+                        document.getElementById('materia_prima').value = item.nome_materia_prima || '';
+                        document.getElementById('peca').value = item.nome_peca || '';
+                        document.getElementById('ambiente').value = item.nome_ambiente || '';
+                        document.getElementById('id_materia').value = item.id_materia || '';
+                        document.getElementById('id_peca').value = item.id_peca || '';
+                        document.getElementById('id_ambiente').value = item.id_ambiente || '';
+                        document.getElementById('qtd_itens').value = item.qtd_itens || 1;
+                        editandoItemId = id;
+                        const btn = document.getElementById('btnAdicionarItem');
+                        btn.textContent = 'Salvar Alterações';
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-warning');
+                        const infoTab = document.getElementById('info-tab');
+                        if (infoTab) infoTab.click();
+                        // Remover mensagem de sucesso de venda se estiver visível
+                        const successModal = document.getElementById('successModal');
+                        if (successModal && successModal.classList.contains('show')) {
+                            const modalInstance = bootstrap.Modal.getInstance(successModal);
+                            if (modalInstance) modalInstance.hide();
+                        }
+                        // Remover alertas de sucesso/erro
+                        document.querySelectorAll('.alert-success, .alert-danger').forEach(e => e.remove());
+                    })
+                    .catch(() => alert('Erro ao carregar dados do item.'));
+            }
+            function removerItem(event, id) {
+                if (event) event.preventDefault();
+                if (confirm('Deseja remover este item?')) {
+                    fetch('../api/venda_itens_remove.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ id_item: id })
+                    })
+                        .then(r => r.json())
+                        .then(resp => {
+                            if (resp.success) {
+                                carregarGridItens();
+                            } else {
+                                alert(resp.error || 'Erro ao remover item.');
+                            }
+                        })
+                        .catch(() => alert('Erro ao remover item.'));
+                }
+            }
+            document.addEventListener('DOMContentLoaded', carregarGridItens);
+
+            // Adicionar item via AJAX
+            document.getElementById('btnAdicionarItem').addEventListener('click', function () {
+                const materia = document.getElementById('materia_prima').value.trim();
+                const peca = document.getElementById('peca').value.trim();
+                const ambiente = document.getElementById('ambiente').value.trim();
+                const idMateria = document.getElementById('materia_prima').dataset.id || document.getElementById('id_materia').value || '';
+                const idPeca = document.getElementById('peca').dataset.id || document.getElementById('id_peca').value || '';
+                const idAmbiente = document.getElementById('ambiente').dataset.id || document.getElementById('id_ambiente').value || '';
+                document.getElementById('id_materia').value = idMateria;
+                document.getElementById('id_peca').value = idPeca;
+                document.getElementById('id_ambiente').value = idAmbiente;
+                const qtd = document.getElementById('qtd_itens').value || 1;
+
+                // Validar campos obrigatórios da venda
+                const dtVenda = document.getElementById('dt_venda').value;
+                const cliente = document.getElementById('cliente').value.trim();
+                if (!dtVenda || !cliente) {
+                    alert('Preencha a data da venda e o nome do cliente antes de adicionar itens.');
+                    return;
+                }
+
+                let idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+                if (editandoItemId) {
+                    fetch('../api/venda_itens_update.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            id_item: editandoItemId,
+                            id_venda: idVenda,
+                            id_materia: idMateria,
+                            id_peca: idPeca,
+                            id_ambiente: idAmbiente,
+                            nome_materia_prima: materia,
+                            nome_peca: peca,
+                            nome_ambiente: ambiente,
+                            qtd: qtd,
+                            qtd_itens: qtd
+                        })
+                    })
+                        .then(r => r.json())
+                        .then(resp => {
+                            if (resp.success) {
+                                carregarGridItens();
+                                setTimeout(carregarGridItens, 200);
+                                limparCamposItem();
+                                // Remover alertas de sucesso/erro
+                                document.querySelectorAll('.alert-success, .alert-danger').forEach(e => e.remove());
+                            } else {
+                                alert(resp.error || 'Erro ao atualizar item.');
+                            }
+                        })
+                        .catch(() => alert('Erro ao atualizar item.'));
+                } else {
+                    // Adicionar novo item
+                    if (!idVenda) {
+                        const form = document.querySelector('form');
+                        const formData = new FormData(form);
+                        fetch('../api/venda_save_ajax.php', {
+                            method: 'POST',
+                            body: formData
+                        })
+                            .then(r => r.json())
+                            .then(resp => {
+                                if (resp.success && resp.id_venda) {
+                                    idVenda = resp.id_venda;
+                                    window.history.replaceState({}, '', '?id=' + idVenda);
+                                    adicionarItem(idVenda, idMateria, idPeca, idAmbiente, materia, peca, ambiente, qtd);
+                                    setTimeout(carregarGridItens, 500);
+                                } else {
+                                    alert(resp.error || 'Erro ao salvar a venda. Verifique os campos obrigatórios.');
+                                }
+                            })
+                            .catch(() => alert('Erro ao salvar a venda.'));
+                    } else {
+                        adicionarItem(idVenda, idMateria, idPeca, idAmbiente, materia, peca, ambiente, qtd);
+                    }
+                }
+            });
+
+            function limparCamposItem() {
+                document.getElementById('materia_prima').value = '';
+                document.getElementById('peca').value = '';
+                document.getElementById('ambiente').value = '';
+                document.getElementById('materia_prima').dataset.id = '';
+                document.getElementById('peca').dataset.id = '';
+                document.getElementById('ambiente').dataset.id = '';
+                document.getElementById('id_materia').value = '';
+                document.getElementById('id_peca').value = '';
+                document.getElementById('id_ambiente').value = '';
+                document.getElementById('qtd_itens').value = 1;
+                editandoItemId = null;
+                // Restaurar botão
+                const btn = document.getElementById('btnAdicionarItem');
+                btn.textContent = 'Adicionar';
+                btn.classList.remove('btn-warning');
+                btn.classList.add('btn-primary');
+            }
+
+            function adicionarItem(idVenda, idMateria, idPeca, idAmbiente, nomeMateria, nomePeca, nomeAmbiente, qtd) {
+                fetch('../api/venda_itens_add.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        id_venda: idVenda,
+                        id_materia: idMateria,
+                        id_peca: idPeca,
+                        id_ambiente: idAmbiente,
+                        nome_materia_prima: nomeMateria,
+                        nome_peca: nomePeca,
+                        nome_ambiente: nomeAmbiente,
+                        qtd: qtd,
+                        qtd_itens: qtd
+                    })
+                })
+                    .then(r => r.json())
+                    .then(resp => {
+                        if (resp.success) {
+                            carregarGridItens();
+                            // Limpar campos
+                            document.getElementById('materia_prima').value = '';
+                            document.getElementById('peca').value = '';
+                            document.getElementById('ambiente').value = '';
+                            document.getElementById('materia_prima').dataset.id = '';
+                            document.getElementById('peca').dataset.id = '';
+                            document.getElementById('ambiente').dataset.id = '';
+                            document.getElementById('id_materia').value = '';
+                            document.getElementById('id_peca').value = '';
+                            document.getElementById('id_ambiente').value = '';
+                            document.getElementById('qtd_itens').value = 1;
+                        } else {
+                            alert(resp.error || 'Erro ao adicionar item.');
+                        }
+                    })
+                    .catch(() => alert('Erro ao adicionar item.'));
+            }
+        </script>
+    </div>
+
+</div>
+
+<!-- Aba 3: Upload e listagem de PDFs -->
+<div class="tab-pane fade" id="arquivos" role="tabpanel" aria-labelledby="arquivos-tab">
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📎 Upload de Arquivos PDF</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Formulário de upload de PDF, id único e botão dentro do form -->
+                    <form id="formUploadPDF" enctype="multipart/form-data" method="post" action="#" autocomplete="off">
+                        <div class="mb-3">
+                            <label for="pdf_file" class="form-label">Selecione um arquivo PDF</label>
+                            <input type="file" name="pdf_file" id="pdf_file" class="form-control"
+                                accept="application/pdf" required>
+                        </div>
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-primary" id="btnUploadPDF">Enviar PDF</button>
+                        </div>
+                    </form>
+                    <hr>
+                    <h5>Arquivos Enviados</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle" id="grid-arquivos">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome do Arquivo</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="grid-arquivos-body">
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted">Carregando...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- O script de upload foi movido para o final do arquivo -->
 </div>
 
 
-
-</div>
-
+<!-- <?php if ($sucesso && $novaVenda): ?>
+        <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true"
+            data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="successModalLabel">
+                            <i class="fas fa-check-circle me-2"></i>Sucesso!
+                        </h5>
+                    </div>
+                    <div class="modal-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                        </div>
+                        <h5>Venda cadastrada com sucesso!</h5>
+                        <p class="text-muted">
+                            Cliente: <strong><?= htmlspecialchars($venda['cliente']) ?></strong><br>
+                            Valor: <strong>R$ <?= number_format($venda['vlr_total'], 2, ',', '.') ?></strong>
+                            <?php if (isset($vendaId)): ?>
+                                <br><small class="text-info">ID da Venda: #<?= $vendaId ?></small>
+                                <span id="idVendaHidden" style="display:none;">ID da Venda: #<?= $vendaId ?></span>
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                    <div class="modal-footer justify-content-center">
+                        <button type="button" class="btn btn-success btn-lg" id="btnNovaVenda">
+                            <i class="fas fa-plus me-2"></i>OK - Nova Venda
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary"
+                            onclick="window.location.href='vendas_list.php'">
+                            <i class="fas fa-list me-2"></i>Ver Vendas
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?> -->
 
 <!-- VALORES E PAGAMENTO -->
 <!-- <div class="col-12">
@@ -499,8 +962,8 @@ require_once '../views/header.php';
                     <div class="row">
                         <div class="col-md-6">
                             <label for="vlr_total" class="form-label">Valor Total *</label>
-                            <input type="text" name="vlr_total" id="vlr_total" class="form-control money" 
-                                   value="<?= $venda['vlr_total'] ? number_format($venda['vlr_total'], 2, ',', '.') : '' ?>" required>
+                <input type="text" name="vlr_total" id="vlr_total" class="form-control money" 
+                    value="<?= $venda['vlr_total'] ? number_format($venda['vlr_total'], 2, ',', '.') : '' ?>">
                         </div>
 
                         <div class="col-md-6">
@@ -511,7 +974,7 @@ require_once '../views/header.php';
 
                         <div class="col-md-6">
                             <label for="forma_pg" class="form-label">Forma de Pagamento *</label>
-                            <select name="forma_pg" id="forma_pg" class="form-control" required>
+                            <select name="forma_pg" id="forma_pg" class="form-control">
                                 <option value="">Selecione</option>
                                 <option value="À Vista" <?= $venda['forma_pg'] === 'À Vista' ? 'selected' : '' ?>>À Vista</option>
                                 <option value="Parcelado" <?= $venda['forma_pg'] === 'Parcelado' ? 'selected' : '' ?>>Boleto Parcelado</option>
@@ -546,50 +1009,13 @@ require_once '../views/header.php';
             </div>
         </div> -->
 
-<div class="col-12">
+<!-- <div class="col-12">
     <button type="submit" class="btn btn-primary">Salvar</button>
     <a href="vendas_list.php" class="btn btn-secondary">Cancelar</a>
-</div>
-</form>
-</div>
+</div> -->
 
-<?php if ($sucesso && $novaVenda): ?>
-    <!-- Modal de Sucesso -->
-    <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true"
-        data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title" id="successModalLabel">
-                        <i class="fas fa-check-circle me-2"></i>Sucesso!
-                    </h5>
-                </div>
-                <div class="modal-body text-center">
-                    <div class="mb-3">
-                        <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
-                    </div>
-                    <h5>Venda cadastrada com sucesso!</h5>
-                    <p class="text-muted">
-                        Cliente: <strong><?= htmlspecialchars($venda['cliente']) ?></strong><br>
-                        Valor: <strong>R$ <?= number_format($venda['vlr_total'], 2, ',', '.') ?></strong>
-                        <?php if (isset($vendaId)): ?>
-                            <br><small class="text-info">ID da Venda: #<?= $vendaId ?></small>
-                        <?php endif; ?>
-                    </p>
-                </div>
-                <div class="modal-footer justify-content-center">
-                    <button type="button" class="btn btn-success btn-lg" id="btnNovaVenda">
-                        <i class="fas fa-plus me-2"></i>OK - Nova Venda
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary"
-                        onclick="window.location.href='vendas_list.php'">
-                        <i class="fas fa-list me-2"></i>Ver Vendas
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
+
+
 
 <style>
     .modal-content {
@@ -628,6 +1054,106 @@ require_once '../views/header.php';
     }
 </style>
 
+<script>
+    console.log('SCRIPT FINAL PDF: carregado');
+    // Funções da aba 3: upload/lista/remover PDF
+    function carregarGridArquivos() {
+        const idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+        const tbody = document.getElementById('grid-arquivos-body');
+        if (!idVenda) {
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Salve a venda para enviar arquivos.</td></tr>';
+            return;
+        }
+        fetch('../api/arquivos_list.php?id_venda=' + idVenda)
+            .then(r => r.json())
+            .then(arquivos => {
+                if (!Array.isArray(arquivos) || arquivos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Nenhum arquivo enviado.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                arquivos.forEach(arq => {
+                    tbody.innerHTML += `<tr>
+                    <td><a href="/${arq.nome}" target="_blank">${arq.nome.split('/').pop()}</a></td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="removerArquivo(${arq.id_arquivo})">Remover</button>
+                    </td>
+                </tr>`;
+                });
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center text-danger">Erro ao carregar arquivos.</td></tr>';
+            });
+    }
+
+    function removerArquivo(idArquivo) {
+    if (!window.confirm('Tem certeza que deseja remover este arquivo? Esta ação não pode ser desfeita.')) return;
+        fetch('../api/arquivos_remove.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ id_arquivo: idArquivo })
+        })
+            .then(r => r.json())
+            .then(resp => {
+                if (resp.success) {
+                    carregarGridArquivos();
+                } else {
+                    alert(resp.error || 'Erro ao remover arquivo.');
+                }
+            })
+            .catch(() => alert('Erro ao remover arquivo.'));
+    }
+
+
+    // Delegação de eventos para garantir que o clique funcione mesmo se o botão for recriado
+    document.addEventListener('click', function (e) {
+        if (e.target && e.target.id === 'btnUploadPDF') {
+            e.preventDefault();
+            alert('DEBUG: Clique no botão capturado!');
+            console.log('submit PDF');
+            var formUploadPDF = document.getElementById('formUploadPDF');
+            const idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+            if (!idVenda) {
+                alert('Salve a venda antes de enviar arquivos.');
+                return false;
+            }
+            if (!formUploadPDF) {
+                alert('Formulário de upload não encontrado!');
+                return false;
+            }
+            const formData = new FormData(formUploadPDF);
+            formData.append('id_venda', idVenda);
+            fetch('../api/arquivos_upload.php', {
+                method: 'POST',
+                body: formData
+            })
+                .then(r => r.json())
+                .then(resp => {
+                    let msg = '';
+                    if (resp.success) {
+                        carregarGridArquivos();
+                        formUploadPDF.reset();
+                        msg = 'Arquivo enviado com sucesso!\n';
+                    } else {
+                        msg = (resp.error || 'Erro ao enviar arquivo.') + '\n';
+                    }
+                    msg += 'Caminho real: ' + (resp.targetPath || '-') + '\n';
+                    msg += 'Permissão da pasta: ' + (resp.perms_base || '-') + '\n';
+                    msg += 'is_dir_base: ' + (resp.is_dir_base ? 'sim' : 'não') + '\n';
+                    if (resp.debug) msg += 'Debug: ' + JSON.stringify(resp.debug) + '\n';
+                    alert(msg);
+                })
+                .catch(() => alert('Erro ao enviar arquivo.'));
+            return false;
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        carregarGridArquivos();
+    });
+    // Não há mais bindUploadPDF, só delegação de eventos
+</script>
+
 
 
 <script>
@@ -656,6 +1182,7 @@ require_once '../views/header.php';
                             btn.innerHTML = `<b>${item.nome}</b>`;
                             btn.onclick = () => {
                                 input.value = item.nome;
+                                input.dataset.id = item.id_ambiente || '';
                                 sugestoesDiv.innerHTML = '';
                                 sugestoesDiv.style.display = 'none';
                             };
@@ -691,6 +1218,7 @@ require_once '../views/header.php';
                         btn.innerHTML = `<b>${item.nome}</b>`;
                         btn.onclick = () => {
                             input.value = item.nome;
+                            input.dataset.id = item.id_ambiente || '';
                             sugestoesDiv.innerHTML = '';
                             sugestoesDiv.style.display = 'none';
                         };
@@ -730,6 +1258,7 @@ require_once '../views/header.php';
                             btn.innerHTML = `<b>${item.nome}</b>`;
                             btn.onclick = () => {
                                 input.value = item.nome;
+                                input.dataset.id = item.id_materia || '';
                                 sugestoesDiv.innerHTML = '';
                                 sugestoesDiv.style.display = 'none';
                             };
@@ -765,6 +1294,7 @@ require_once '../views/header.php';
                         btn.innerHTML = `<b>${item.nome}</b>`;
                         btn.onclick = () => {
                             input.value = item.nome;
+                            input.dataset.id = item.id_materia || '';
                             sugestoesDiv.innerHTML = '';
                             sugestoesDiv.style.display = 'none';
                         };
@@ -804,6 +1334,7 @@ require_once '../views/header.php';
                             btn.innerHTML = `<b>${item.tipo}</b> <small class='text-muted'>${item.formapg || ''}</small>`;
                             btn.onclick = () => {
                                 input.value = item.tipo;
+                                input.dataset.id = item.id_peca || '';
                                 sugestoesDiv.innerHTML = '';
                                 sugestoesDiv.style.display = 'none';
                             };
@@ -839,6 +1370,7 @@ require_once '../views/header.php';
                         btn.innerHTML = `<b>${item.tipo}</b> <small class='text-muted'>${item.formapg || ''}</small>`;
                         btn.onclick = () => {
                             input.value = item.tipo;
+                            input.dataset.id = item.id_peca || '';
                             sugestoesDiv.innerHTML = '';
                             sugestoesDiv.style.display = 'none';
                         };
