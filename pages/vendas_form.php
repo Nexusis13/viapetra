@@ -21,21 +21,34 @@ function getStatusOptionsByTipo($tipo)
     }
 }
 
+
 // Descobrir tipo do usuário logado
 $usuario_tipo = $_SESSION['usuario_tipo'] ?? 'user';
 $statusPerm = getStatusOptionsByTipo($usuario_tipo);
 $status_options = $statusPerm['options'];
 $status_editavel = $statusPerm['editavel'];
 
-
-
 $erro = '';
 $sucesso = '';
 $novaVenda = false;
 $vendaId = null;
+
+// Buscar id_vendedor do usuário logado (se for novo pedido)
+$id_vendedor_usuario = null;
+if (isset($_SESSION['usuario_id'])) {
+    // Busca via API interna
+    $usuario_id = (int) $_SESSION['usuario_id'];
+    $stmt = $pdo->prepare('SELECT id_vendedor FROM usuarios WHERE id = ?');
+    $stmt->execute([$usuario_id]);
+    $row = $stmt->fetch();
+    if ($row && !empty($row['id_vendedor'])) {
+        $id_vendedor_usuario = $row['id_vendedor'];
+    }
+}
+
 $venda = [
     'id_venda' => '',
-    'id_vendedor' => '',
+    'id_vendedor' => $id_vendedor_usuario ?? '',
     'id_vendedor2' => '',
     'id_comissao' => '',
     'id_comissao2' => '',
@@ -80,7 +93,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
 // Processar formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $id_vendedor = $_POST['id_vendedor'] ?? '';
+    $id_vendedor = $_POST['id_vendedor'] ?? ($id_vendedor_usuario ?? '');
     $id_vendedor2 = $_POST['id_vendedor2'] ?? '';
     $id_comissao = $_POST['id_comissao'] ?? '';
     $id_comissao2 = $_POST['id_comissao2'] ?? '';
@@ -121,13 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $erro = 'Vendedor principal selecionado não é válido ou está inativo.';
         }
 
-        if (!empty($id_vendedor2)) {
-            $stmtVendedor2 = $pdo->prepare("SELECT id_vendedor FROM vendedores WHERE id_vendedor = ? AND STATUS = 1");
-            $stmtVendedor2->execute([$id_vendedor2]);
-            if (!$stmtVendedor2->fetch()) {
-                $erro = 'Segundo vendedor selecionado não é válido ou está inativo.';
-            }
-        }
+        // if (!empty($id_vendedor2)) {
+        //     $stmtVendedor2 = $pdo->prepare("SELECT id_vendedor FROM vendedores WHERE id_vendedor = ? AND STATUS = 1");
+        //     $stmtVendedor2->execute([$id_vendedor2]);
+        //     if (!$stmtVendedor2->fetch()) {
+        //         $erro = 'Segundo vendedor selecionado não é válido ou está inativo.';
+        //     }
+        // }
     }
 
     // Validar comissões se informadas
@@ -213,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $sucesso = 'Venda cadastrada com sucesso!';
                 $novaVenda = true;
+
 
             } else {
                 // Atualizar venda existente
@@ -343,12 +357,17 @@ require_once '../views/header.php';
         <h2><?= empty($venda['id_venda']) && !$novaVenda ? 'Nova Venda' : ($novaVenda ? 'Nova Venda' : 'Editar Venda') ?>
         </h2>
 
+
         <?php if ($erro): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($erro) ?></div>
         <?php endif; ?>
 
         <?php if ($sucesso && !$novaVenda): ?>
             <div class="alert alert-success"><?= htmlspecialchars($sucesso) ?></div>
+        <?php endif; ?>
+
+        <?php if ($sucesso && $novaVenda): ?>
+            <div class="alert alert-success">Venda cadastrada com sucesso!</div>
         <?php endif; ?>
 
 
@@ -427,17 +446,13 @@ require_once '../views/header.php';
                                 <div class="row">
 
                                     <div class="col-md-4">
-                                        <label for="numero_pedido" class="form-label">Nº Pedido</label>
+                                        <label for="numero_pedido" class="form-label">Nº Pedido *</label>
                                         <input type="text" name="numero_pedido" id="numero_pedido" class="form-control"
                                             value="<?= isset($venda['numero_pedido']) ? htmlspecialchars($venda['numero_pedido']) : '' ?>"
-                                            maxlength="50">
+                                            required maxlength="50">
                                     </div>
 
-                                    <div class="col-md-4">
-                                        <label for="dt_desenho" class="form-label">Data do Desenho</label>
-                                        <input type="date" name="dt_desenho" id="dt_desenho" class="form-control"
-                                            value="<?= isset($venda['dt_desenho']) ? htmlspecialchars($venda['dt_desenho']) : '' ?>">
-                                    </div>
+                                    <!-- dt_desenho removido -->
 
                                     <div class="col-md-4">
                                         <label for="prazo_entrega" class="form-label">Prazo de Entrega (dias)</label>
@@ -453,75 +468,77 @@ require_once '../views/header.php';
                         </div>
                     </div>
 
-                    <!-- VENDEDORES E COMISSÕES -->
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">👥 Vendedores e Comissões</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <!-- Vendedor Principal -->
-                                    <div class="col-md-6">
-                                        <label for="id_vendedor" class="form-label">Vendedor Principal *</label>
-                                        <select name="id_vendedor" id="id_vendedor" class="form-control">
-                                            <option value="">Selecione o vendedor principal</option>
-                                            <?php foreach ($vendedores as $vendedor): ?>
-                                                <option value="<?= $vendedor['id_vendedor'] ?>"
-                                                    <?= $venda['id_vendedor'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($vendedor['nome']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-6">
-                                        <label for="id_comissao" class="form-label">Comissão do Vendedor
-                                            Principal</label>
-                                        <select name="id_comissao" id="id_comissao" class="form-control">
-                                            <option value="">Sem comissão</option>
-                                            <?php foreach ($comissoes as $comissao): ?>
-                                                <option value="<?= $comissao['id_comissao'] ?>"
-                                                    <?= $venda['id_comissao'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
-                                                    <?= $comissao['valor'] ?>%
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <!-- Segundo Vendedor -->
-                                    <div class="col-md-6">
-                                        <label for="id_vendedor2" class="form-label">Segundo Vendedor <small
-                                                class="text-muted">(Opcional)</small></label>
-                                        <select name="id_vendedor2" id="id_vendedor2" class="form-control">
-                                            <option value="">Nenhum segundo vendedor</option>
-                                            <?php foreach ($vendedores as $vendedor): ?>
-                                                <option value="<?= $vendedor['id_vendedor'] ?>"
-                                                    <?= $venda['id_vendedor2'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($vendedor['nome']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-6">
-                                        <label for="id_comissao2" class="form-label">Comissão do Segundo
-                                            Vendedor</label>
-                                        <select name="id_comissao2" id="id_comissao2" class="form-control">
-                                            <option value="">Sem comissão</option>
-                                            <?php foreach ($comissoes as $comissao): ?>
-                                                <option value="<?= $comissao['id_comissao'] ?>"
-                                                    <?= $venda['id_comissao2'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
-                                                    <?= $comissao['valor'] ?>%
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
+                    <?php if ($usuario_tipo === 'admin'): ?>
+                        <!-- VENDEDORES E COMISSÕES -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">👥 Vendedores e Comissões</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="id_vendedor" class="form-label">Vendedor Principal *</label>
+                                            <select name="id_vendedor" id="id_vendedor" class="form-control">
+                                                <option value="">Selecione o vendedor principal</option>
+                                                <?php foreach ($vendedores as $vendedor): ?>
+                                                    <option value="<?= $vendedor['id_vendedor'] ?>"
+                                                        <?= $venda['id_vendedor'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($vendedor['nome']) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_comissao" class="form-label">Comissão do Vendedor
+                                                Principal</label>
+                                            <select name="id_comissao" id="id_comissao" class="form-control">
+                                                <option value="">Sem comissão</option>
+                                                <?php foreach ($comissoes as $comissao): ?>
+                                                    <option value="<?= $comissao['id_comissao'] ?>"
+                                                        <?= $venda['id_comissao'] == $comissao['id_comissao'] ? 'selected' : '' ?>>
+                                                        <?= $comissao['valor'] ?>%
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_vendedor2" class="form-label">Segundo Vendedor <small
+                                                    class="text-muted">(Opcional)</small></label>
+                                            <select name="id_vendedor2" id="id_vendedor2" class="form-control">
+                                                <option value="">Nenhum segundo vendedor</option>
+                                                <?php foreach ($vendedores as $vendedor): ?>
+                                                    <option value="<?= $vendedor['id_vendedor'] ?>"
+                                                        <?= $venda['id_vendedor2'] == $vendedor['id_vendedor'] ? 'selected' : '' ?>><?= htmlspecialchars($vendedor['nome']) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_comissao2" class="form-label">Comissão do Segundo
+                                                Vendedor</label>
+                                            <select name="id_comissao2" id="id_comissao2" class="form-control">
+                                                <option value="">Sem comissão</option>
+                                                <?php foreach ($comissoes as $comissao): ?>
+                                                    <option value="<?= $comissao['id_comissao'] ?>"
+                                                        <?= $venda['id_comissao2'] == $comissao['id_comissao'] ? 'selected' : '' ?>><?= $comissao['valor'] ?>%</option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
+
                             </div>
+
                         </div>
-                    </div>
+                    <?php else: ?>
+                        <input type="hidden" name="id_vendedor" value="<?= htmlspecialchars($venda['id_vendedor']) ?>">
+                        <input type="hidden" name="id_comissao" value="<?= htmlspecialchars($venda['id_comissao']) ?>">
+                        <input type="hidden" name="id_vendedor2" value="<?= htmlspecialchars($venda['id_vendedor2']) ?>">
+                        <input type="hidden" name="id_comissao2" value="<?= htmlspecialchars($venda['id_comissao2']) ?>">
+                    <?php endif; ?>
                 </div>
+
+
 
                 <div class="col-12 mt-3">
                     <button type="submit" class="btn btn-primary">Salvar</button>
@@ -600,7 +617,9 @@ require_once '../views/header.php';
                         </div>
 
                         <div class="col-12 mt-3">
-                            <button type="button" class="btn btn-primary" id="btnAdicionarItem">Adicionar</button>
+                            <button type="button" class="btn btn-primary" id="btnAdicionarItem"
+                                disabled>Adicionar</button>
+
                         </div>
                         <hr>
                         <div class="col-12 mt-4">
@@ -629,6 +648,23 @@ require_once '../views/header.php';
             </div>
         </div>
         <script>
+
+            // Função global para ativar/desativar botões de ações de venda salva
+            function setVendaActionsEnabled(enabled) {
+                var btnAdicionar = document.getElementById('btnAdicionarItem');
+                var btnUploadPDF = document.getElementById('btnUploadPDF');
+                var inputPDF = document.getElementById('pdf_file');
+                if (btnAdicionar) btnAdicionar.disabled = !enabled;
+                if (btnUploadPDF) btnUploadPDF.disabled = !enabled;
+                if (inputPDF) inputPDF.disabled = !enabled;
+            }
+
+            // Ativa/desativa botões ao carregar a página
+            document.addEventListener('DOMContentLoaded', function () {
+                var idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+                setVendaActionsEnabled(!!idVenda);
+            });
+
             // Debug: listar todos os forms e seus ids ao abrir a aba 3
             document.getElementById('arquivos-tab').addEventListener('shown.bs.tab', function () {
                 setTimeout(function () {
@@ -641,6 +677,8 @@ require_once '../views/header.php';
                     alert(msg);
                 }, 300);
             });
+
+
             function carregarGridItens() {
                 const idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
                 const tbody = document.getElementById('grid-itens-body');
@@ -671,7 +709,10 @@ require_once '../views/header.php';
                     })
                     .catch(() => {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erro ao carregar itens.</td></tr>';
-                    });
+                        <a href="vendas_list.php" class="btn btn-secondary">Cancelar</a>
+                                    </div >
+                                </div >
+                    }
             }
             let editandoItemId = null;
             function editarItem(event, id) {
@@ -703,7 +744,7 @@ require_once '../views/header.php';
                             const modalInstance = bootstrap.Modal.getInstance(successModal);
                             if (modalInstance) modalInstance.hide();
                         }
-                        // Remover alertas de sucesso/erro
+                        // Remover alertas de sucesso/erroa
                         document.querySelectorAll('.alert-success, .alert-danger').forEach(e => e.remove());
                     })
                     .catch(() => alert('Erro ao carregar dados do item.'));
@@ -751,6 +792,28 @@ require_once '../views/header.php';
                 }
 
                 let idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
+                if (!idVenda) {
+                    // Salvar pedido antes de adicionar item
+                    const form = document.querySelector('form');
+                    const formData = new FormData(form);
+                    fetch('../api/venda_save_ajax.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(r => r.json().catch(() => { throw new Error('Resposta inválida do servidor'); }))
+                        .then(resp => {
+                            if (resp.success && resp.id_venda) {
+                                // Mantém o usuário na mesma aba após salvar o pedido
+                                var hash = window.location.hash || '';
+                                window.location.href = '?id=' + resp.id_venda + hash;
+                            } else {
+                                alert(resp.error || 'Erro ao salvar a venda. Verifique os campos obrigatórios.');
+                            }
+                        })
+                        .catch(e => alert(e.message || 'Erro ao salvar a venda.'));
+                    return;
+                }
+
                 if (editandoItemId) {
                     fetch('../api/venda_itens_update.php', {
                         method: 'POST',
@@ -768,7 +831,7 @@ require_once '../views/header.php';
                             qtd_itens: qtd
                         })
                     })
-                        .then(r => r.json())
+                        .then(r => r.json().catch(() => { throw new Error('Resposta inválida do servidor'); }))
                         .then(resp => {
                             if (resp.success) {
                                 carregarGridItens();
@@ -780,31 +843,9 @@ require_once '../views/header.php';
                                 alert(resp.error || 'Erro ao atualizar item.');
                             }
                         })
-                        .catch(() => alert('Erro ao atualizar item.'));
+                        .catch(e => alert(e.message || 'Erro ao atualizar item.'));
                 } else {
-                    // Adicionar novo item
-                    if (!idVenda) {
-                        const form = document.querySelector('form');
-                        const formData = new FormData(form);
-                        fetch('../api/venda_save_ajax.php', {
-                            method: 'POST',
-                            body: formData
-                        })
-                            .then(r => r.json())
-                            .then(resp => {
-                                if (resp.success && resp.id_venda) {
-                                    idVenda = resp.id_venda;
-                                    window.history.replaceState({}, '', '?id=' + idVenda);
-                                    adicionarItem(idVenda, idMateria, idPeca, idAmbiente, materia, peca, ambiente, qtd);
-                                    setTimeout(carregarGridItens, 500);
-                                } else {
-                                    alert(resp.error || 'Erro ao salvar a venda. Verifique os campos obrigatórios.');
-                                }
-                            })
-                            .catch(() => alert('Erro ao salvar a venda.'));
-                    } else {
-                        adicionarItem(idVenda, idMateria, idPeca, idAmbiente, materia, peca, ambiente, qtd);
-                    }
+                    adicionarItem(idVenda, idMateria, idPeca, idAmbiente, materia, peca, ambiente, qtd);
                 }
             });
 
@@ -843,7 +884,7 @@ require_once '../views/header.php';
                         qtd_itens: qtd
                     })
                 })
-                    .then(r => r.json())
+                    .then(r => r.json().catch(() => { throw new Error('Resposta inválida do servidor'); }))
                     .then(resp => {
                         if (resp.success) {
                             carregarGridItens();
@@ -862,7 +903,7 @@ require_once '../views/header.php';
                             alert(resp.error || 'Erro ao adicionar item.');
                         }
                     })
-                    .catch(() => alert('Erro ao adicionar item.'));
+                    .catch(e => alert(e.message || 'Erro ao adicionar item.'));
             }
         </script>
     </div>
@@ -883,10 +924,10 @@ require_once '../views/header.php';
                         <div class="mb-3">
                             <label for="pdf_file" class="form-label">Selecione um arquivo PDF</label>
                             <input type="file" name="pdf_file" id="pdf_file" class="form-control"
-                                accept="application/pdf" required>
+                                accept="application/pdf" required disabled />
                         </div>
                         <div class="mb-3">
-                            <button type="button" class="btn btn-primary" id="btnUploadPDF">Enviar PDF</button>
+                            <button type="button" class="btn btn-primary" id="btnUploadPDF" disabled>Enviar PDF</button>
                         </div>
                     </form>
                     <hr>
@@ -910,8 +951,8 @@ require_once '../views/header.php';
             </div>
         </div>
     </div>
-    <!-- O script de upload foi movido para o final do arquivo -->
 </div>
+
 
 
 <!-- <?php if ($sucesso && $novaVenda): ?>
@@ -1055,6 +1096,23 @@ require_once '../views/header.php';
 </style>
 
 <script>
+    // Bloquear submit do form ao pressionar Enter (exceto textarea)
+    document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('formVenda').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target.tagName.toLowerCase() !== 'textarea') {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        document.getElementById('formUploadPDF').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target.tagName.toLowerCase() !== 'textarea') {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+
     console.log('SCRIPT FINAL PDF: carregado');
     // Funções da aba 3: upload/lista/remover PDF
     function carregarGridArquivos() {
@@ -1087,7 +1145,7 @@ require_once '../views/header.php';
     }
 
     function removerArquivo(idArquivo) {
-    if (!window.confirm('Tem certeza que deseja remover este arquivo? Esta ação não pode ser desfeita.')) return;
+        if (!window.confirm('Tem certeza que deseja remover este arquivo? Esta ação não pode ser desfeita.')) return;
         fetch('../api/arquivos_remove.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1167,7 +1225,7 @@ require_once '../views/header.php';
         const termo = input.value;
         if (termo.length === 0 || /^\s+$/.test(termo)) {
             timeoutAmbiente = setTimeout(() => {
-                fetch('../api/ambiente.php?q=')
+                fetch('../api/ambiente_get.php?q=')
                     .then(r => r.json())
                     .then(dados => {
                         sugestoesDiv.innerHTML = '';
@@ -1203,7 +1261,7 @@ require_once '../views/header.php';
             return;
         }
         timeoutAmbiente = setTimeout(() => {
-            fetch('../api/ambiente.php?q=' + encodeURIComponent(termo))
+            fetch('../api/ambiente_get.php?q=' + encodeURIComponent(termo))
                 .then(r => r.json())
                 .then(dados => {
                     sugestoesDiv.innerHTML = '';
@@ -1243,7 +1301,7 @@ require_once '../views/header.php';
         const termo = input.value;
         if (termo.length === 0 || /^\s+$/.test(termo)) {
             timeoutMateria = setTimeout(() => {
-                fetch('../api/materia_prima.php?q=')
+                fetch('../api/materia_prima_get.php?q=')
                     .then(r => r.json())
                     .then(dados => {
                         sugestoesDiv.innerHTML = '';
@@ -1279,7 +1337,7 @@ require_once '../views/header.php';
             return;
         }
         timeoutMateria = setTimeout(() => {
-            fetch('../api/materia_prima.php?q=' + encodeURIComponent(termo))
+            fetch('../api/materia_prima_get.php?q=' + encodeURIComponent(termo))
                 .then(r => r.json())
                 .then(dados => {
                     sugestoesDiv.innerHTML = '';
@@ -1319,7 +1377,7 @@ require_once '../views/header.php';
         const termo = input.value;
         if (termo.length === 0 || /^\s+$/.test(termo)) {
             timeoutPeca = setTimeout(() => {
-                fetch('../api/pecas.php?q=')
+                fetch('../api/pecas_get.php?q=')
                     .then(r => r.json())
                     .then(dados => {
                         sugestoesDiv.innerHTML = '';
@@ -1355,7 +1413,7 @@ require_once '../views/header.php';
             return;
         }
         timeoutPeca = setTimeout(() => {
-            fetch('../api/pecas.php?q=' + encodeURIComponent(termo))
+            fetch('../api/pecas_get.php?q=' + encodeURIComponent(termo))
                 .then(r => r.json())
                 .then(dados => {
                     sugestoesDiv.innerHTML = '';
@@ -1412,7 +1470,7 @@ require_once '../views/header.php';
         // Se o campo estiver vazio OU só espaço, busca os 25 primeiros
         if (termo.length === 0 || /^\s+$/.test(termo)) {
             timeoutCliente = setTimeout(() => {
-                fetch('../api/clientes.php?q=')
+                fetch('../api/clientes_get.php?q=')
                     .then(r => r.json())
                     .then(dados => {
                         sugestoesDiv.innerHTML = '';
@@ -1448,7 +1506,7 @@ require_once '../views/header.php';
             return;
         }
         timeoutCliente = setTimeout(() => {
-            fetch('../api/clientes.php?q=' + encodeURIComponent(termo))
+            fetch('../api/clientes_get.php?q=' + encodeURIComponent(termo))
                 .then(r => r.json())
                 .then(dados => {
                     sugestoesDiv.innerHTML = '';

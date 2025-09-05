@@ -1,6 +1,8 @@
 <?php
+
 require_once '../config/protect.php';
 require_once '../config/config.php';
+require_once '../api/vendedores_get.php';
 
 $id = $_GET['id'] ?? null;
 $inativar = $_GET['inativar'] ?? null;
@@ -36,20 +38,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login = $_POST['login'] ?? '';
     $senha = $_POST['senha'] ?? '';
     $tipo = $_POST['tipo'] ?? '';
+    $id_vendedor = !empty($_POST['id_vendedor']) ? (int)$_POST['id_vendedor'] : null;
     $ativo = 1;
 
     if ($modo_edicao) {
         if ($senha) {
-            $stmt = $pdo->prepare("UPDATE usuarios SET nome = ?, login = ?, senha = ?, tipo = ? WHERE id = ?");
-            $stmt->execute([$nome, $login, password_hash($senha, PASSWORD_DEFAULT), $tipo, $id]);
+            $stmt = $pdo->prepare("UPDATE usuarios SET nome = ?, login = ?, senha = ?, tipo = ?, id_vendedor = ? WHERE id = ?");
+            $stmt->execute([$nome, $login, password_hash($senha, PASSWORD_DEFAULT), $tipo, $id_vendedor, $id]);
         } else {
-            $stmt = $pdo->prepare("UPDATE usuarios SET nome = ?, login = ?, tipo = ? WHERE id = ?");
-            $stmt->execute([$nome, $login, $tipo, $id]);
+            $stmt = $pdo->prepare("UPDATE usuarios SET nome = ?, login = ?, tipo = ?, id_vendedor = ? WHERE id = ?");
+            $stmt->execute([$nome, $login, $tipo, $id_vendedor, $id]);
         }
+        // Atualizar $usuario para manter seleção após update
+        $usuario['nome'] = $nome;
+        $usuario['login'] = $login;
+        $usuario['tipo'] = $tipo;
+        $usuario['id_vendedor'] = $id_vendedor;
         $mensagem = 'Usuário atualizado com sucesso!';
     } else {
-        $stmt = $pdo->prepare("INSERT INTO usuarios (nome, login, senha, tipo, ativo) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$nome, $login, password_hash($senha, PASSWORD_DEFAULT), $tipo, $ativo]);
+        $stmt = $pdo->prepare("INSERT INTO usuarios (nome, login, senha, tipo, ativo, id_vendedor) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$nome, $login, password_hash($senha, PASSWORD_DEFAULT), $tipo, $ativo, $id_vendedor]);
         $mensagem = 'Usuário cadastrado com sucesso!';
     }
 }
@@ -80,8 +88,19 @@ require_once '../views/header.php';
             <label class="form-label">Tipo</label>
             <select name="tipo" class="form-select" required>
                 <option value="">Selecione...</option>
-                <option value="admin" <?= (isset($usuario['admin']) && $usuario['admin'] == 'admin') ? 'selected' : '' ?>>Administrador</option>
-                <option value="user" <?= (isset($usuario['user']) && $usuario['user'] == 'user') ? 'selected' : '' ?>>Usuario</option>
+                <option value="admin" <?= (isset($usuario['tipo']) && $usuario['tipo'] == 'admin') ? 'selected' : '' ?>>Administrador</option>
+                <option value="user" <?= (isset($usuario['tipo']) && $usuario['tipo'] == 'user') ? 'selected' : '' ?>>Usuario</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Vincular a Vendedor</label>
+            <select name="id_vendedor" class="form-select">
+                <option value="">Nenhum</option>
+                <?php foreach ($vendedores as $vend): ?>
+                    <option value="<?= $vend['id_vendedor'] ?>" <?= (isset($usuario['id_vendedor']) && $usuario['id_vendedor'] == $vend['id_vendedor']) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($vend['nome']) ?>
+                    </option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div class="col-12">

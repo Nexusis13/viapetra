@@ -247,7 +247,7 @@ if (!function_exists('formatarDocumento')) {
                             <span class="badge bg-secondary ms-2"><?= $total_registros ?> registros</span>
                         </h5>
                         <div class="d-flex gap-2">
-                            <a href="relatorio_clientes.php" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            <a href="relatorio_clientes_get.php" target="_blank" class="btn btn-outline-secondary btn-sm">
                                 <i class="bi bi-printer"></i> Imprimir/Salvar PDF
                             </a>
                             <a href="cliente_form.php" class="btn btn-primary btn-sm">
