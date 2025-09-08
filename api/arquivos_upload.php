@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+
 $id_venda = isset($_POST['id_venda']) ? (int)$_POST['id_venda'] : 0;
 if (!$id_venda) {
     echo json_encode(['success' => false, 'error' => 'ID da venda não informado.']);
@@ -79,14 +80,11 @@ if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
     exit;
 }
 
-try {
-    $stmt = $pdo->prepare('INSERT INTO arquivos (id_venda, nome) VALUES (?, ?)');
-    $stmt->execute([$id_venda, $relativePath]);
 
-    // Atualizar dt_desenho da venda com a data de modificação do arquivo PDF
+try {
     $fileDate = date('Y-m-d', filemtime($targetPath));
-    $stmt2 = $pdo->prepare('UPDATE vendas SET dt_desenho = ? WHERE id_venda = ?');
-    $stmt2->execute([$fileDate, $id_venda]);
+    $stmt = $pdo->prepare('INSERT INTO arquivos (id_venda, nome, dt_desenho) VALUES (?, ?, ?)');
+    $stmt->execute([$id_venda, $relativePath, $fileDate]);
 
     echo json_encode([
         'success' => true,

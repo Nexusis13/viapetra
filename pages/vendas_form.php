@@ -694,18 +694,18 @@ require_once '../views/header.php';
                 setVendaActionsEnabled(!!idVenda);
             });
 
-            // Debug: listar todos os forms e seus ids ao abrir a aba 3
-            document.getElementById('arquivos-tab').addEventListener('shown.bs.tab', function () {
-                setTimeout(function () {
-                    var forms = document.querySelectorAll('form');
-                    var msg = 'FORMS NA PÁGINA:\n';
-                    console.log(msg);
-                    forms.forEach(function (f, i) {
-                        msg += (i + 1) + ': id=' + (f.id || '-') + ', class=' + (f.className || '-') + '\n';
-                    });
-                    alert(msg);
-                }, 300);
-            });
+            // // Debug: listar todos os forms e seus ids ao abrir a aba 3
+            // document.getElementById('arquivos-tab').addEventListener('shown.bs.tab', function () {
+            //     setTimeout(function () {
+            //         var forms = document.querySelectorAll('form');
+            //         var msg = 'FORMS NA PÁGINA:\n';
+            //         console.log(msg);
+            //         forms.forEach(function (f, i) {
+            //             msg += (i + 1) + ': id=' + (f.id || '-') + ', class=' + (f.className || '-') + '\n';
+            //         });
+            //         alert(msg);
+            //     }, 300);
+            // });
 
 
             function carregarGridItens() {
@@ -1160,8 +1160,9 @@ require_once '../views/header.php';
                 tbody.innerHTML = '';
                 arquivos.forEach(arq => {
                     tbody.innerHTML += `<tr>
-                    <td><a href="/${arq.nome}" target="_blank">${arq.nome.split('/').pop()}</a></td>
+                    <td><a href="/viapetra/api/download.php?file=${encodeURIComponent(arq.nome.replace('arquivos_venda/', ''))}" target="_blank">${arq.nome.split('/').pop()}</a></td>
                     <td>
+                        <a href="/viapetra/api/download.php?file=${encodeURIComponent(arq.nome.replace('arquivos_venda/', ''))}" target="_blank" class="btn btn-sm btn-info me-1">Visualizar</a>
                         <button type="button" class="btn btn-sm btn-danger" onclick="removerArquivo(${arq.id_arquivo})">Remover</button>
                     </td>
                 </tr>`;
@@ -1195,7 +1196,7 @@ require_once '../views/header.php';
     document.addEventListener('click', function (e) {
         if (e.target && e.target.id === 'btnUploadPDF') {
             e.preventDefault();
-            alert('DEBUG: Clique no botão capturado!');
+            //alert('DEBUG: Clique no botão capturado!');
             console.log('submit PDF');
             var formUploadPDF = document.getElementById('formUploadPDF');
             const idVenda = <?= isset($venda['id_venda']) ? (int) $venda['id_venda'] : 'null' ?>;
@@ -1223,9 +1224,9 @@ require_once '../views/header.php';
                     } else {
                         msg = (resp.error || 'Erro ao enviar arquivo.') + '\n';
                     }
-                    msg += 'Caminho real: ' + (resp.targetPath || '-') + '\n';
-                    msg += 'Permissão da pasta: ' + (resp.perms_base || '-') + '\n';
-                    msg += 'is_dir_base: ' + (resp.is_dir_base ? 'sim' : 'não') + '\n';
+                    // msg += 'Caminho real: ' + (resp.targetPath || '-') + '\n';
+                    // msg += 'Permissão da pasta: ' + (resp.perms_base || '-') + '\n';
+                    // msg += 'is_dir_base: ' + (resp.is_dir_base ? 'sim' : 'não') + '\n';
                     if (resp.debug) msg += 'Debug: ' + JSON.stringify(resp.debug) + '\n';
                     alert(msg);
                 })
