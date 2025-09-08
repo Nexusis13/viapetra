@@ -59,7 +59,8 @@ $venda = [
     'forma_pg' => '',
     'qtd_parcelas' => '1',
     'dt_boletos' => '',
-    'status' => 'PENDENTE'
+    'status' => 'PENDENTE',
+    'prazo_entrega' => ''
 ];
 
 // Buscar vendedores ativos
@@ -85,6 +86,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         if ($venda['dt_boletos']) {
             $venda['dt_boletos'] = date('Y-m-d', strtotime($venda['dt_boletos']));
         }
+        if (!isset($venda['numero_pedido'])) { $venda['numero_pedido'] = ''; }
     } else {
         $erro = 'Venda não encontrada.';
     }
@@ -93,6 +95,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
 // Processar formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    $numero_pedido = trim($_POST['numero_pedido'] ?? '');
     $id_vendedor = $_POST['id_vendedor'] ?? ($id_vendedor_usuario ?? '');
     $id_vendedor2 = $_POST['id_vendedor2'] ?? '';
     $id_comissao = $_POST['id_comissao'] ?? '';
@@ -103,9 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vlr_entrada = str_replace(['.', ','], ['', '.'], $_POST['vlr_entrada'] ?? '');
     $forma_pg = $_POST['forma_pg'] ?? '';
     $qtd_parcelas = $_POST['qtd_parcelas'] ?? '1';
-
     $dt_boletos = $_POST['dt_boletos'] ?? '';
     $status = $_POST['status'] ?? $venda['status'] ?? 'PENDENTE';
+    $prazo_entrega = isset($_POST['prazo_entrega']) ? (int)$_POST['prazo_entrega'] : null;
     // Validação do status
     $status_enum = ['PENDENTE', 'PRODUCAO'];
     if (!in_array($status, $status_enum)) {
@@ -173,8 +176,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($venda['id_venda'])) {
                 // Inserir nova venda
                 $stmt = $pdo->prepare("
-                    INSERT INTO vendas (id_vendedor, id_vendedor2, id_comissao, id_comissao2, dt_venda, cliente, vlr_total, vlr_entrada, forma_pg, qtd_parcelas, dt_boletos, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO vendas (id_vendedor, id_vendedor2, id_comissao, id_comissao2, dt_venda, cliente, vlr_total, vlr_entrada, forma_pg, qtd_parcelas, dt_boletos, status, numero_pedido, prazo_entrega)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
                     $id_vendedor,
@@ -188,7 +191,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $forma_pg,
                     $qtd_parcelas,
                     $dt_boletos_final,
-                    $status
+                    $status,
+                    $numero_pedido,
+                    $prazo_entrega
                 ]);
 
                 $id_venda = $pdo->lastInsertId();
@@ -224,16 +229,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                $sucesso = 'Venda cadastrada com sucesso!';
-                $novaVenda = true;
-
+                $pdo->commit();
+                // Redirecionar para a mesma página com o novo id_venda
+                header('Location: vendas_form.php?id=' . $id_venda);
+                exit;
 
             } else {
                 // Atualizar venda existente
                 $stmt = $pdo->prepare("
                     UPDATE vendas SET 
                         id_vendedor = ?, id_vendedor2 = ?, id_comissao = ?, id_comissao2 = ?, dt_venda = ?, cliente = ?, 
-                        vlr_total = ?, vlr_entrada = ?, forma_pg = ?, qtd_parcelas = ?, dt_boletos = ?, status = ?
+                        vlr_total = ?, vlr_entrada = ?, forma_pg = ?, qtd_parcelas = ?, dt_boletos = ?, status = ?,
+                        numero_pedido = ?, prazo_entrega = ?
                     WHERE id_venda = ?
                 ");
                 $stmt->execute([
@@ -249,6 +256,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $qtd_parcelas,
                     $dt_boletos_final,
                     $status,
+                    $numero_pedido,
+                    $prazo_entrega,
                     $venda['id_venda']
                 ]);
 
@@ -340,6 +349,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $venda['qtd_parcelas'] = $qtd_parcelas;
             $venda['dt_boletos'] = $dt_boletos_final;
             $venda['status'] = $status;
+            $venda['numero_pedido'] = $numero_pedido;
+            $venda['prazo_entrega'] = $prazo_entrega;
 
 
         } catch (Exception $e) {
@@ -410,7 +421,7 @@ require_once '../views/header.php';
                                 <div class="row">
 
 
-                                    <div class="col-md-4">
+                                    <div class="col-md-12">
                                         <label for="cliente" class="form-label">Nome do Cliente *</label>
                                         <input type="text" name="cliente" id="cliente" class="form-control"
                                             value="<?= htmlspecialchars($venda['cliente']) ?>" required maxlength="100"
@@ -418,33 +429,12 @@ require_once '../views/header.php';
                                         <div id="cliente-sugestoes" class="list-group position-absolute w-100"
                                             style="z-index: 1000;"></div>
                                     </div>
-                                    <div class="col-md-4">
-                                        <label for="status" class="form-label">Status da Venda</label>
-                                        <select name="status" id="status" class="form-control" <?= !$status_editavel ? 'disabled' : '' ?>>
-                                            <?php foreach ($status_options as $opt): ?>
-                                                <option value="<?= $opt ?>" <?= $venda['status'] === $opt ? 'selected' : '' ?>>
-                                                    <?= $opt ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <?php if (!$status_editavel): ?>
-                                            <input type="hidden" name="status"
-                                                value="<?= htmlspecialchars($venda['status']) ?>">
-                                        <?php endif; ?>
 
-                                    </div>
+ 
 
-
-
-                                    <div class="col-md-4">
-                                        <label for="dt_venda" class="form-label">Data da Venda *</label>
-                                        <input type="date" name="dt_venda" id="dt_venda" class="form-control"
-                                            value="<?= htmlspecialchars($venda['dt_venda']) ?>" required>
-                                    </div>
                                 </div>
                                 <!--Linha 2-->
                                 <div class="row">
-
                                     <div class="col-md-4">
                                         <label for="numero_pedido" class="form-label">Nº Pedido *</label>
                                         <input type="text" name="numero_pedido" id="numero_pedido" class="form-control"
@@ -452,7 +442,12 @@ require_once '../views/header.php';
                                             required maxlength="50">
                                     </div>
 
-                                    <!-- dt_desenho removido -->
+                                    <div class="col-md-4">
+                                        <label for="dt_venda" class="form-label">Data da Venda *</label>
+                                        <input type="date" name="dt_venda" id="dt_venda" class="form-control"
+                                            value="<?= htmlspecialchars($venda['dt_venda']) ?>" required>
+                                    </div>
+
 
                                     <div class="col-md-4">
                                         <label for="prazo_entrega" class="form-label">Prazo de Entrega (dias)</label>
@@ -461,6 +456,40 @@ require_once '../views/header.php';
                                             value="<?= isset($venda['prazo_entrega']) ? htmlspecialchars($venda['prazo_entrega']) : '' ?>"
                                             min="0">
                                     </div>
+
+                                                                        <?php if ($status_editavel): ?>
+                                    <div class="col-md-4">
+                                        <label for="status" class="form-label">Status da Venda</label>
+                                        <select name="status" id="status" class="form-control">
+                                            <?php foreach ($status_options as $opt): ?>
+                                                <option value="<?= $opt ?>" <?= $venda['status'] === $opt ? 'selected' : '' ?>>
+                                                    <?= $opt ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <?php else: ?>
+                                        <input type="hidden" name="status" value="<?= htmlspecialchars($venda['status']) ?>">
+                                    <?php endif; ?>
+
+                                </div>
+
+                                <!--Linha 3-->
+                                <div class="row">
+                                 <?php if ($status_editavel): ?>
+                                    <div class="col-md-4">
+                                        <label for="status" class="form-label">Status da Venda</label>
+                                        <select name="status" id="status" class="form-control">
+                                            <?php foreach ($status_options as $opt): ?>
+                                                <option value="<?= $opt ?>" <?= $venda['status'] === $opt ? 'selected' : '' ?>>
+                                                    <?= $opt ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <?php else: ?>
+                                        <input type="hidden" name="status" value="<?= htmlspecialchars($venda['status']) ?>">
+                                    <?php endif; ?>
 
                                 </div>
 
@@ -709,10 +738,9 @@ require_once '../views/header.php';
                     })
                     .catch(() => {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erro ao carregar itens.</td></tr>';
-                        <a href="vendas_list.php" class="btn btn-secondary">Cancelar</a>
-                                    </div >
-                                </div >
-                    }
+                        // ...existing code...
+                    });
+                
             }
             let editandoItemId = null;
             function editarItem(event, id) {
@@ -1291,7 +1319,7 @@ require_once '../views/header.php';
         }, 250);
     }
 
-    // Autocomplete AJAX para matéria-prima
+
     let timeoutMateria = null;
     function buscaMateriaPrima() {
         const input = document.getElementById('materia_prima');
